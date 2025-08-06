@@ -73,7 +73,7 @@ fi
 
 # 6. Check clean shutdown on ctrl+c
 echo "🛑 Checking clean shutdown implementation..."
-if grep -q "ctrl+c.*tea.Quit\|tea.KeyCtrlC" internal/tui/model.go; then
+if grep -q "case \"ctrl+c\"" internal/tui/model.go && grep -q "tea.Quit" internal/tui/model.go; then
     echo "✅ Clean shutdown on Ctrl+C implemented"
 else
     echo "❌ Clean shutdown not found"

@@ -47,6 +47,7 @@ deps:
 	@echo "Installing dependencies..."
 	go mod download
 	go mod tidy
+	go mod verify
 
 # Check formatting
 .PHONY: fmt-check
@@ -54,16 +55,24 @@ fmt-check:
 	@echo "Checking formatting..."
 	@test -z "$$(gofmt -l .)" || (echo "Files not formatted:" && gofmt -l . && exit 1)
 
+# Verify TUI implementation
+.PHONY: verify-tui
+verify-tui:
+	@echo "Verifying TUI implementation..."
+	chmod +x scripts/verify-prompt-1.2.sh
+	./scripts/verify-prompt-1.2.sh
+
 # Display help
 .PHONY: help
 help:
 	@echo "Available targets:"
-	@echo "  all       - Clean, lint, test, and build"
-	@echo "  build     - Build the application"
-	@echo "  test      - Run tests with race detection"
-	@echo "  lint      - Run gofmt and go vet"
-	@echo "  clean     - Clean build artifacts"
-	@echo "  run       - Build and run the application"
-	@echo "  deps      - Install and tidy dependencies"
-	@echo "  fmt-check - Check if code is properly formatted"
-	@echo "  help      - Display this help message"
+	@echo "  all        - Clean, lint, test, and build"
+	@echo "  build      - Build the application"
+	@echo "  test       - Run tests with race detection"
+	@echo "  lint       - Run gofmt and go vet"
+	@echo "  clean      - Clean build artifacts"
+	@echo "  run        - Build and run the application"
+	@echo "  deps       - Install and tidy dependencies"
+	@echo "  fmt-check  - Check if code is properly formatted"
+	@echo "  verify-tui - Verify TUI implementation (Prompt 1.2)"
+	@echo "  help       - Display this help message"

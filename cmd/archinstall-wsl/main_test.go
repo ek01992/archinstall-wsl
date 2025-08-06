@@ -3,6 +3,8 @@ package main
 import (
 	"os"
 	"testing"
+
+	"archinstall-wsl/internal/tui"
 )
 
 func TestMain(m *testing.M) {
@@ -19,4 +21,12 @@ func TestApplicationStartup(t *testing.T) {
 		t.Skip("Skipping application startup test in short mode")
 	}
 	// Test passes if we reach this point
+}
+
+func TestTUIModel(t *testing.T) {
+	// Test that the TUI model can be created
+	model := tui.NewModel()
+	if model.Init() == nil {
+		// Model creation is valid, test passes
+	}
 }

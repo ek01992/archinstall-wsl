@@ -3,7 +3,7 @@
 [![CI](https://github.com/ekowald/archinstall-wsl/actions/workflows/ci.yml/badge.svg)](https://github.com/ekowald/archinstall-wsl/actions/workflows/ci.yml)
 [![codecov](https://codecov.io/gh/ekowald/archinstall-wsl/branch/main/graph/badge.svg)](https://codecov.io/gh/ekowald/archinstall-wsl)
 
-A TUI configurator for ArchInstall on WSL environments.
+A modern Terminal User Interface (TUI) configurator for ArchInstall on WSL environments. Built with Go and Bubble Tea for an intuitive command-line experience.
 
 ## Project Structure
 
@@ -48,7 +48,18 @@ make run
 
 # Or directly
 ./bin/archwsl-tui-configurator
+
+# To test the TUI application
+./scripts/test-tui.sh
 ```
+
+### TUI Features
+
+- **Welcome Screen**: Beautiful introduction with auto-transition
+- **Main Menu**: Interactive menu with ArchInstall configuration tasks
+- **Keyboard Navigation**: Vi-style (hjkl) and arrow key support
+- **Clean Shutdown**: Ctrl+C or 'q' to quit gracefully
+- **Responsive Design**: Adapts to terminal size
 
 ### Development
 

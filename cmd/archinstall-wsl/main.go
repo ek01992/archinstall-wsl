@@ -3,7 +3,12 @@ package main
 import (
 	"flag"
 	"fmt"
+	"log"
 	"os"
+
+	"archinstall-wsl/internal/tui"
+
+	tea "github.com/charmbracelet/bubbletea"
 )
 
 var (
@@ -26,7 +31,16 @@ func main() {
 		os.Exit(0)
 	}
 
-	fmt.Println("ArchInstall WSL TUI Configurator")
-	fmt.Println("Starting application...")
-	os.Exit(0)
+	// Initialize the TUI application
+	program := tea.NewProgram(
+		tui.NewModel(),
+		tea.WithAltScreen(),       // Use alternate screen buffer
+		tea.WithMouseCellMotion(), // Enable mouse support
+	)
+
+	// Run the TUI application
+	if _, err := program.Run(); err != nil {
+		log.Printf("Error running TUI application: %v", err)
+		os.Exit(1)
+	}
 }

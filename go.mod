@@ -1,6 +1,6 @@
 module archinstall-wsl
 
-go 1.22.2
+go 1.24.6
 
 require (
 	github.com/charmbracelet/bubbletea v0.25.0

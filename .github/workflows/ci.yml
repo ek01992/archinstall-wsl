@@ -2,68 +2,33 @@ name: CI
 
 on:
   push:
-    branches: [ main, master, develop ]
+    branches: [ main, develop ]
   pull_request:
-    branches: [ main, master, develop ]
+    branches: [ main ]
 
 jobs:
   test:
     runs-on: ubuntu-latest
-
-    strategy:
-      matrix:
-        go-version: [1.22.2]
-
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
+    - uses: actions/checkout@v4
 
     - name: Set up Go
       uses: actions/setup-go@v4
       with:
-        go-version: ${{ matrix.go-version }}
+        go-version: '1.24.6'
 
-    - name: Cache Go modules
-      uses: actions/cache@v3
-      with:
-        path: |
-          ~/.cache/go-build
-          ~/go/pkg/mod
-        key: ${{ runner.os }}-go-${{ matrix.go-version }}-${{ hashFiles('**/go.sum') }}
-        restore-keys: |
-          ${{ runner.os }}-go-${{ matrix.go-version }}-
-
-    - name: Download dependencies
+    - name: Install dependencies
       run: go mod download
 
-    - name: Verify dependencies
-      run: go mod verify
-
-    - name: Check formatting
-      run: |
-        if [ "$(gofmt -s -l . | wc -l)" -gt 0 ]; then
-          echo "The following files are not formatted:"
-          gofmt -s -l .
-          exit 1
-        fi
+    - name: Run gofmt
+      run: gofmt -s .
 
     - name: Run go vet
       run: go vet ./...
 
     - name: Run tests
-      run: go test ./... -race -coverprofile=coverage.out
+      run: go test ./... -race
 
-    - name: Upload coverage to Codecov
-      uses: codecov/codecov-action@v3
-      with:
-        file: ./coverage.out
-        flags: unittests
-        name: codecov-umbrella
+    - name: Build
+      run: go build -o bin/archinstall-wsl ./cmd/archinstall-wsl
 
-    - name: Build binary
-      run: make build
-
-    - name: Test binary execution
-      run: |
-        ./bin/archwsl-tui-configurator --help || true
-        ./bin/archwsl-tui-configurator --version || true

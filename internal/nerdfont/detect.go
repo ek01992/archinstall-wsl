@@ -12,15 +12,21 @@ import (
 var (
 	// enumerateWindowsFontFiles lists font filenames from the Windows Fonts directory via WSL mount.
 	enumerateWindowsFontFiles = func() ([]string, error) {
-		// First attempt direct mount
-		if platform.CanEditHostFiles() {
-			fontsDir := "/mnt/c/Windows/Fonts"
-			if names, err := readFontDir(fontsDir); err == nil {
-				return names, nil
+		// Probe common mount roots for Windows C: drive fonts
+		if isWSL() {
+			candidates := []string{
+				"/mnt/c/Windows/Fonts",
+				"/c/Windows/Fonts",
+				"/mnt/host/c/Windows/Fonts",
+			}
+			for _, dir := range candidates {
+				if names, err := readFontDir(dir); err == nil {
+					return names, nil
+				}
 			}
 		}
 		// Alternate path probing via wslpath if running under WSL
-		if platform.IsWSL() {
+		if isWSL() {
 			if p, err := runWSLCapture("-u", "C:\\Windows\\Fonts"); err == nil {
 				path := strings.TrimSpace(p)
 				if names, err2 := readFontDir(path); err2 == nil {
@@ -60,10 +66,13 @@ var (
 		out, err := cmd.CombinedOutput()
 		return string(out), err
 	}
+
+	// isWSL is a seam around platform.IsWSL for tests
+	isWSL = func() bool { return platform.IsWSL() }
 )
 
 func registryNerdFontPresent() bool {
-	if !platform.IsWSL() {
+	if !isWSL() {
 		return false
 	}
 	// Query Windows registry for installed fonts and look for Nerd Font entries

@@ -38,7 +38,7 @@ func installZsh() error {
 	if err := runCommand("chsh", "-s", zshPath, username); err != nil {
 		// Fallback to usermod
 		if err2 := runCommand("usermod", "-s", zshPath, username); err2 != nil {
-			return fmt.Errorf("failed to set shell via chsh and usermod: %v / %w", err, err2)
+			return fmt.Errorf("set shell: usermod failed: %w (chsh failed: %v)", err2, err)
 		}
 	}
 

@@ -32,7 +32,16 @@ func importSSHKeysFromWindowsTx(hostPath string) (err error) {
 		if perr == nil {
 			path := dst
 			data := append([]byte(nil), prev...)
-			tr.Defer(func() error { return writeFile(path, data, fs.FileMode(0o600)) })
+			// Attempt to preserve previous mode; fall back to 0600
+			mode := fs.FileMode(0o600)
+			if m, statErr := lstatMode(path); statErr == nil {
+				mode = m
+			}
+			m := mode
+			tr.Defer(func() error {
+				if err := writeFile(path, data, m); err != nil { return err }
+				return chmod(path, m)
+			})
 		} else {
 			path := dst
 			tr.Defer(func() error { return removeFile(path) })
@@ -47,3 +56,6 @@ func importSSHKeysFromWindowsTx(hostPath string) (err error) {
 }
 
 var removeFile = func(path string) error { return nil }
+
+// lstatMode is a seam to obtain a file's permission bits
+var lstatMode = func(path string) (fs.FileMode, error) { return fs.FileMode(0), fs.ErrNotExist }

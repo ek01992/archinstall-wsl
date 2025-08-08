@@ -1,7 +1,7 @@
 package ssh
 
 import (
-	"errors"
+	"fmt"
 
 	"archwsl-tui-configurator/internal/platform"
 )
@@ -12,10 +12,10 @@ var importSSHKeys = func(hostPath string) error { return importSSHKeysFromWindow
 // importSSHKeysWithConsent imports keys only if the caller explicitly consents and host files are editable.
 func importSSHKeysWithConsent(hostPath string, consent bool) error {
 	if !consent {
-		return errors.New("ssh key import requires explicit consent")
+		return fmt.Errorf("ssh key import: explicit consent required")
 	}
 	if !canEditHostFiles() {
-		return errors.New("host files not accessible (WSL mount missing)")
+		return fmt.Errorf("ssh key import: host files not accessible (WSL mount missing)")
 	}
 	return importSSHKeys(hostPath)
 }

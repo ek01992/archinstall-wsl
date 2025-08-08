@@ -15,6 +15,7 @@ func TestImportSSHKeysFromWindowsTx_RollsBackOnFailure(t *testing.T) {
 	origMkdir := mkdirAll
 	origChmod := chmod
 	origRemove := removeFile
+	origLstatMode := lstatMode
 
 	t.Cleanup(func() {
 		getUserHomeDir = origHome
@@ -24,6 +25,7 @@ func TestImportSSHKeysFromWindowsTx_RollsBackOnFailure(t *testing.T) {
 		mkdirAll = origMkdir
 		chmod = origChmod
 		removeFile = origRemove
+		lstatMode = origLstatMode
 	})
 
 	getUserHomeDir = func() (string, error) { return "/home/alice", nil }
@@ -44,6 +46,11 @@ func TestImportSSHKeysFromWindowsTx_RollsBackOnFailure(t *testing.T) {
 		// Induce failure on first write to trigger rollback
 		return fs.ErrPermission
 	}
+	// Pretend previous mode was 0644 for id_ed25519.pub
+	lstatMode = func(path string) (fs.FileMode, error) {
+		if strings.HasSuffix(path, "/id_ed25519.pub") { return 0o644, nil }
+		return 0o600, nil
+	}
 
 	if err := importSSHKeysFromWindowsTx("/host/.ssh"); err == nil {
 		t.Fatalf("expected failure to trigger rollback")
@@ -61,6 +68,7 @@ func TestImportSSHKeysFromWindowsTx_SuccessDoesNotRollback(t *testing.T) {
 	origMkdir := mkdirAll
 	origChmod := chmod
 	origRemove := removeFile
+	origLstatMode := lstatMode
 
 	t.Cleanup(func() {
 		getUserHomeDir = origHome
@@ -70,6 +78,7 @@ func TestImportSSHKeysFromWindowsTx_SuccessDoesNotRollback(t *testing.T) {
 		mkdirAll = origMkdir
 		chmod = origChmod
 		removeFile = origRemove
+		lstatMode = origLstatMode
 	})
 
 	getUserHomeDir = func() (string, error) { return "/home/bob", nil }
@@ -86,6 +95,7 @@ func TestImportSSHKeysFromWindowsTx_SuccessDoesNotRollback(t *testing.T) {
 
 	removed := false
 	removeFile = func(path string) error { removed = true; return nil }
+	lstatMode = func(path string) (fs.FileMode, error) { return 0o600, nil }
 
 	if err := importSSHKeysFromWindowsTx("/host/.ssh"); err != nil {
 		t.Fatalf("unexpected error: %v", err)

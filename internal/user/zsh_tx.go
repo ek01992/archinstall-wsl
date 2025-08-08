@@ -1,6 +1,10 @@
 package user
 
-import "archwsl-tui-configurator/internal/tx"
+import (
+	"strings"
+
+	"archwsl-tui-configurator/internal/tx"
+)
 
 // installZshTx sets zsh and restores previous shell on failure.
 func installZshTx() (err error) {
@@ -13,7 +17,11 @@ func installZshTx() (err error) {
 
 	username := getTargetUsername()
 	prev := getDefaultShell(username)
-	tr.Defer(func() error { return runCommand("chsh", "-s", prev, username) })
+	if strings.TrimSpace(prev) != "" {
+		p := prev
+		u := username
+		tr.Defer(func() error { return runCommand("chsh", "-s", p, u) })
+	}
 
 	if err = installZsh(); err != nil {
 		return err

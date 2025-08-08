@@ -18,7 +18,6 @@ var (
 		_, err := os.Stat(path)
 		return err == nil
 	}
-	readFile  = func(path string) ([]byte, error) { return os.ReadFile(path) }
 	writeFile = func(path string, data []byte, perm fs.FileMode) error { return os.WriteFile(path, data, perm) }
 	listFiles = func(dir string) ([]string, error) {
 		entries, err := os.ReadDir(dir)

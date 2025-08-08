@@ -30,12 +30,10 @@ func (s *Service) InstallZsh() error {
 	if username == "" {
 		return fmt.Errorf("empty target user")
 	}
-	passwd, err := s.fs.ReadFile("/etc/passwd")
-	if err == nil {
-		cur := strings.TrimSpace(getDefaultShellFromPasswd(passwd, username))
-		if strings.HasSuffix(cur, "/zsh") {
-			return nil
-		}
+	// Idempotency: check via seam and fs
+	if cs := strings.TrimSpace(getDefaultShell(username)); strings.HasSuffix(cs, "/zsh") { return nil }
+	if passwd, err := s.fs.ReadFile("/etc/passwd"); err == nil {
+		if cur := strings.TrimSpace(getDefaultShellFromPasswd(passwd, username)); strings.HasSuffix(cur, "/zsh") { return nil }
 	}
 	// Try chsh first, then fallback to usermod
 	if err := s.cmd.Run("chsh", "-s", s.zshPath, username); err != nil {
@@ -43,14 +41,16 @@ func (s *Service) InstallZsh() error {
 			return fmt.Errorf("usermod set shell: %w", err2)
 		}
 	}
-	// Verify by re-reading passwd
+	// Verify using fs first
 	if passwd2, err := s.fs.ReadFile("/etc/passwd"); err == nil {
-		newShell := strings.TrimSpace(getDefaultShellFromPasswd(passwd2, username))
-		if strings.HasSuffix(newShell, "/zsh") {
-			return nil
-		}
+		if newShell := strings.TrimSpace(getDefaultShellFromPasswd(passwd2, username)); strings.HasSuffix(newShell, "/zsh") { return nil }
 	}
-	return fmt.Errorf("verification failed: expected zsh, got %q", strings.TrimSpace(getDefaultShellFromPasswd(passwd, username)))
+	// Then seam with a brief retry (matches legacy behavior)
+	for i := 0; i < 2; i++ {
+		if cs := strings.TrimSpace(getDefaultShell(username)); strings.HasSuffix(cs, "/zsh") { return nil }
+	}
+	// Final error with seam-observed value
+	return fmt.Errorf("verification failed: expected zsh, got %q", strings.TrimSpace(getDefaultShell(username)))
 }
 
 // InstallZshTx sets zsh and restores previous shell on failure.
@@ -59,21 +59,17 @@ func (s *Service) InstallZshTx() (err error) {
 	defer func() { if err != nil { _ = tr.Rollback() } }()
 
 	username := strings.TrimSpace(s.id.CurrentUsername())
-	if username == "" {
-		return fmt.Errorf("empty target user")
-	}
-	prevShell := ""
-	if passwd, perr := s.fs.ReadFile("/etc/passwd"); perr == nil {
-		prevShell = strings.TrimSpace(getDefaultShellFromPasswd(passwd, username))
-		if prevShell != "" {
-			u := username; p := prevShell
-			tr.Defer(func() error { return s.cmd.Run("chsh", "-s", p, u) })
+	if username == "" { return fmt.Errorf("empty target user") }
+	prevShell := strings.TrimSpace(getDefaultShell(username))
+	if prevShell == "" {
+		if passwd, perr := s.fs.ReadFile("/etc/passwd"); perr == nil {
+			prevShell = strings.TrimSpace(getDefaultShellFromPasswd(passwd, username))
 		}
 	}
-
-	if err = s.InstallZsh(); err != nil {
-		return err
+	if prevShell != "" {
+		u := username; p := prevShell
+		tr.Defer(func() error { return s.cmd.Run("chsh", "-s", p, u) })
 	}
-	tr.Commit()
-	return nil
+	if err = s.InstallZsh(); err != nil { return err }
+	tr.Commit(); return nil
 }

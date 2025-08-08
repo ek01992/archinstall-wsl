@@ -17,8 +17,8 @@ func (s *Service) InstallOhMyZsh(username string, theme string, plugins []string
 		return fmt.Errorf("failed to resolve home for %s: %w", username, err)
 	}
 	omzDir := filepath.Join(home, ".oh-my-zsh")
-	// Best-effort existence check: attempt to read dir listing; if err, assume missing and clone
-	if _, err := s.fs.ReadFile(filepath.Join(omzDir, ".keep")); err != nil {
+	// Check existence using legacy seam for compatibility with existing tests
+	if !pathExists(omzDir) {
 		if err := s.cmd.Run("git", "clone", "--depth", "1", "https://github.com/ohmyzsh/ohmyzsh.git", omzDir); err != nil {
 			return fmt.Errorf("clone oh-my-zsh: %w", err)
 		}

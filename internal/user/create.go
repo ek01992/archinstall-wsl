@@ -50,6 +50,8 @@ var (
 	validateSudoersContent = func(content string) error { return nil }
 )
 
+func currentSudoersDir() string { return sudoersDPath }
+
 // createUser creates the user if missing, sets the password, ensures membership in
 // the wheel group, and enables passwordless sudo for wheel via sudoers.d. It is
 // idempotent: safe to call repeatedly.

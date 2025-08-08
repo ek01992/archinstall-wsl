@@ -25,13 +25,14 @@ type SudoersValidator interface {
 }
 
 type Service struct {
-	cmd  CommandRunner
-	fs   FS
-	id   Lookup
-	sudo SudoersValidator
-	zshPath string
+	cmd        CommandRunner
+	fs         FS
+	id         Lookup
+	sudo       SudoersValidator
+	zshPath    string
+	sudoersDir string
 }
 
 func NewService(cmd CommandRunner, fs FS, id Lookup, sudo SudoersValidator) *Service {
-	return &Service{cmd: cmd, fs: fs, id: id, sudo: sudo, zshPath: "/usr/bin/zsh"}
+	return &Service{cmd: cmd, fs: fs, id: id, sudo: sudo, zshPath: "/usr/bin/zsh", sudoersDir: ""}
 }

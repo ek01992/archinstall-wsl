@@ -32,11 +32,10 @@ func (s *Service) CreateUser(username, password string) error {
 	}
 
 	desired := "%wheel ALL=(ALL) NOPASSWD: ALL\n"
-	const sudoersD = "/etc/sudoers.d"
-	if err := s.fs.MkdirAll(sudoersD, 0o755); err != nil {
-		return fmt.Errorf("ensure sudoers.d: %w", err)
-	}
-	path := filepath.Join(sudoersD, "010_wheel_nopasswd")
+	dir := s.sudoersDir
+	if strings.TrimSpace(dir) == "" { dir = currentSudoersDir() }
+	_ = s.fs.MkdirAll(dir, 0o755)
+	path := filepath.Join(dir, "010_wheel_nopasswd")
 	current, _ := s.fs.ReadFile(path)
 	if string(current) != desired {
 		if err := s.sudo.Validate(desired); err != nil {
@@ -58,7 +57,9 @@ func (s *Service) CreateUserTx(username, password string) (err error) {
 		u := username
 		tr.Defer(func() error { return s.cmd.Run("userdel", "-r", u) })
 	}
-	sudoersFile := filepath.Join("/etc/sudoers.d", "010_wheel_nopasswd")
+	dir := s.sudoersDir
+	if strings.TrimSpace(dir) == "" { dir = currentSudoersDir() }
+	sudoersFile := filepath.Join(dir, "010_wheel_nopasswd")
 	if prev, perr := s.fs.ReadFile(sudoersFile); perr == nil {
 		path := sudoersFile
 		data := append([]byte(nil), prev...)

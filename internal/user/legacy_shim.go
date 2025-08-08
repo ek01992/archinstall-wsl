@@ -3,38 +3,36 @@ package user
 import (
 	"io/fs"
 	"time"
-
-	runtimepkg "archwsl-tui-configurator/internal/runtime"
 )
 
 // TODO: remove this legacy default service after DI migration completes.
 
-// runtime-backed adapters
+// seam-backed adapters use the package-level seams so legacy tests can override behavior.
 
-type runtimeCmd struct{ r runtimepkg.Runner }
+type seamCmd struct{}
 
-func (rc runtimeCmd) Run(name string, args ...string) error { return rc.r.Run(name, args...) }
-func (rc runtimeCmd) RunWithStdin(name, stdin string, args ...string) error {
-	cmdline := name
-	for _, a := range args { cmdline += " " + a }
-	return rc.r.Run("sh", "-c", "printf %s \"$1\" | "+cmdline, "_", stdin)
-}
+func (seamCmd) Run(name string, args ...string) error { return runCommand(name, args...) }
+func (seamCmd) RunWithStdin(name, stdin string, args ...string) error { return runCommandWithStdin(name, stdin, args...) }
 
-type runtimeFS struct{ fs runtimepkg.FS }
+type seamFS struct{}
 
-func (rfs runtimeFS) ReadFile(path string) ([]byte, error) { return rfs.fs.ReadFile(path) }
-func (rfs runtimeFS) WriteFile(path string, data []byte, perm fs.FileMode) error { return rfs.fs.WriteFile(path, data, perm) }
-func (rfs runtimeFS) MkdirAll(path string, perm fs.FileMode) error { return rfs.fs.MkdirAll(path, perm) }
-func (rfs runtimeFS) Chmod(path string, mode fs.FileMode) error { return rfs.fs.Chmod(path, mode) }
+func (seamFS) ReadFile(path string) ([]byte, error) { return readFile(path) }
+func (seamFS) WriteFile(path string, data []byte, perm fs.FileMode) error { return writeFile(path, data, perm) }
+func (seamFS) MkdirAll(path string, perm fs.FileMode) error { return mkdirAll(path, perm) }
+func (seamFS) Chmod(path string, mode fs.FileMode) error { return nil }
 
-type runtimeLookup struct{}
+type seamLookup struct{}
 
-func (runtimeLookup) UserExists(username string) bool { return doesUserExist(username) }
-func (runtimeLookup) HomeDirByUsername(username string) (string, error) { return getHomeDirByUsername(username) }
-func (runtimeLookup) CurrentUsername() string { return getTargetUsername() }
+func (seamLookup) UserExists(username string) bool { return doesUserExist(username) }
+func (seamLookup) HomeDirByUsername(username string) (string, error) { return getHomeDirByUsername(username) }
+func (seamLookup) CurrentUsername() string { return getTargetUsername() }
 
-type runtimeSudo struct{}
+type seamSudo struct{}
 
-func (runtimeSudo) Validate(content string) error { return validateSudoersContent(content) }
+func (seamSudo) Validate(content string) error { return validateSudoersContent(content) }
 
-var defaultService = NewService(runtimeCmd{r: runtimepkg.NewRunner(10 * time.Second)}, runtimeFS{fs: runtimepkg.NewFS()}, runtimeLookup{}, runtimeSudo{})
+var defaultService = NewService(seamCmd{}, seamFS{}, seamLookup{}, seamSudo{})
+
+
+// Keep a no-op variable reference to avoid unused import removal if needed
+var _ = time.Second

@@ -12,7 +12,9 @@ import (
 	"time"
 )
 
-// Command and file operation seams for testability
+// Command and file operation seams for testability.
+// NOTE: These globals are NOT concurrency-safe. Tests must use internal/seams.With
+// to serialize overrides. Prefer dependency injection for concurrency-sensitive code.
 var (
 	runCommand = func(name string, args ...string) error {
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)

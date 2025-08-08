@@ -10,6 +10,8 @@ import (
 	"time"
 )
 
+// NOTE: Package-level seams are for testability and are NOT concurrency-safe.
+// Use internal/seams.With in tests to serialize overrides. Prefer DI if adding concurrency.
 var (
 	runCommand = func(name string, args ...string) error {
 		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
@@ -80,7 +82,7 @@ func isPipxInstalled() bool {
 func installPythonToolchain() error {
 	latest, err := fetchLatestPythonVersion()
 	if err != nil || strings.TrimSpace(latest) == "" {
-		return fmt.Errorf("fetch latest python: %v", err)
+		return fmt.Errorf("fetch latest python: %w", err)
 	}
 
 	if err := ensurePyenvInstalled(); err != nil {

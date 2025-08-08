@@ -9,6 +9,7 @@ import (
 )
 
 var (
+	// NOTE: Seams are NOT concurrency-safe. Use internal/seams.With in tests to serialize overrides.
 	getHomeDirByUsername = func(username string) (string, error) {
 		u, err := stduser.Lookup(username)
 		if err != nil {
@@ -43,7 +44,7 @@ func installOhMyZsh(username string, theme string, plugins []string) error {
 
 	home, err := getHomeDirByUsername(username)
 	if err != nil || strings.TrimSpace(home) == "" {
-		return fmt.Errorf("failed to resolve home for %s: %v", username, err)
+		return fmt.Errorf("failed to resolve home for %s: %w", username, err)
 	}
 
 	omzDir := filepath.Join(home, ".oh-my-zsh")

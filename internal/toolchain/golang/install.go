@@ -20,6 +20,8 @@ func filterEmpty(args []string) []string {
 	return out
 }
 
+// NOTE: Package-level seams are for testability and are NOT concurrency-safe.
+// Use internal/seams.With in tests to serialize overrides. Prefer DI if adding concurrency.
 var (
 	runCommand = func(name string, args ...string) error {
 		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
@@ -59,7 +61,7 @@ func currentGoVersion() (string, error) {
 func installGoToolchain() error {
 	latest, err := fetchLatestGoVersion()
 	if err != nil || strings.TrimSpace(latest) == "" {
-		return fmt.Errorf("fetch latest go version: %v", err)
+		return fmt.Errorf("fetch latest go version: %w", err)
 	}
 
 	cur, err := currentGoVersion()

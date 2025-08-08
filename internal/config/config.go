@@ -22,6 +22,8 @@ type Config struct {
 	NonInteractive bool     `yaml:"NonInteractive"`
 }
 
+// NOTE: Package-level seams are for testability and are NOT concurrency-safe.
+// Use internal/seams.With in tests to serialize overrides. Prefer DI if adding concurrency.
 var (
 	getUserHomeDir = func() (string, error) { return osUserHomeDirImpl() }
 	mkdirAll       = func(path string, perm fs.FileMode) error { return os.MkdirAll(path, perm) }
@@ -33,7 +35,7 @@ var (
 func saveConfig(cfg Config) error {
 	home, err := getUserHomeDir()
 	if err != nil || strings.TrimSpace(home) == "" {
-		return fmt.Errorf("cannot determine home directory: %v", err)
+		return fmt.Errorf("cannot determine home directory: %w", err)
 	}
 	dir := filepath.Join(home, ".config", "archwsl-tui-configurator")
 	if err := mkdirAll(dir, 0o700); err != nil {

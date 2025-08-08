@@ -5,6 +5,8 @@ import (
 	"strings"
 )
 
+// NOTE: Package-level seams below are for testability and are NOT concurrency-safe.
+// Use internal/seams.With in tests to serialize overrides. Prefer DI if adding concurrency.
 var (
 	readFile = func(path string) ([]byte, error) { return os.ReadFile(path) }
 	pathExists = func(path string) bool {

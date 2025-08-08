@@ -9,6 +9,8 @@ import (
 	"strings"
 )
 
+// NOTE: Package-level seams below are for testability and are NOT concurrency-safe.
+// Use internal/seams.With in tests to serialize overrides. Prefer DI if adding concurrency.
 var (
 	getUserHomeDir = func() (string, error) { return osUserHomeDir() }
 	osUserHomeDir  = func() (string, error) { return osUserHomeDirImpl() }
@@ -47,7 +49,7 @@ func osUserHomeDirImpl() (string, error) { return os.UserHomeDir() }
 func installDotfiles(repoURL string) error {
 	home, err := getUserHomeDir()
 	if err != nil || strings.TrimSpace(home) == "" {
-		return fmt.Errorf("cannot determine home directory: %v", err)
+		return fmt.Errorf("cannot determine home directory: %w", err)
 	}
 
 	repoURL = strings.TrimSpace(repoURL)

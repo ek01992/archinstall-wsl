@@ -5,6 +5,7 @@ package runtime_test
 import (
 	"io/fs"
 	"path/filepath"
+	"runtime"
 	"testing"
 	"time"
 
@@ -12,6 +13,9 @@ import (
 )
 
 func TestProdRunner_OutputEcho(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("skipping on windows")
+	}
 	runner := rtx.NewRunner(5 * time.Second)
 	out, err := runner.Output("echo", "ok")
 	if err != nil {
@@ -23,6 +27,9 @@ func TestProdRunner_OutputEcho(t *testing.T) {
 }
 
 func TestProdRunner_RunTrue(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("skipping on windows")
+	}
 	runner := rtx.NewRunner(5 * time.Second)
 	if err := runner.Run("sh", "-c", "true"); err != nil {
 		t.Fatalf("Run returned error: %v", err)
@@ -30,6 +37,9 @@ func TestProdRunner_RunTrue(t *testing.T) {
 }
 
 func TestProdFS_BasicOperations(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("skipping on windows")
+	}
 	fsys := rtx.NewFS()
 	tmp := t.TempDir()
 

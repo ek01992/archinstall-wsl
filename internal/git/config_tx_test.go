@@ -1,5 +1,7 @@
 package git
 
+// Legacy tests: to be removed after DI migration.
+
 import (
 	"strings"
 	"testing"

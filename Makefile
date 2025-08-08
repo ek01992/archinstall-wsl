@@ -11,7 +11,12 @@ tidy:
 	$(GO) mod tidy
 
 lint:
-	golangci-lint run ./...
+	@if command -v golangci-lint >/dev/null 2>&1; then \
+		golangci-lint run ./...; \
+	else \
+		$(GO) install github.com/golangci/golangci-lint/cmd/golangci-lint@latest && \
+		$$($(GO) env GOPATH)/bin/golangci-lint run ./...; \
+	fi
 
 vet:
 	$(GO) vet ./...

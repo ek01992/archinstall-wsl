@@ -2,6 +2,7 @@ package golang
 
 import (
 	"errors"
+	"strings"
 	"testing"
 )
 
@@ -23,7 +24,8 @@ func TestInstallGoToolchain_InstallsWhenMissing(t *testing.T) {
 			t.Fatalf("expected pacman, got %q", name)
 		}
 		// Expect initial install when missing
-		if len(args) == 3 && args[0] == "-S" && args[1] == "--noconfirm" && args[2] == "go" {
+		joined := strings.Join(args, " ")
+		if strings.HasPrefix(joined, "-S --noconfirm go") {
 			installed = true
 			return nil
 		}
@@ -66,7 +68,8 @@ func TestInstallGoToolchain_UpdatesWhenOutdated(t *testing.T) {
 		if name != "pacman" {
 			t.Fatalf("expected pacman, got %q", name)
 		}
-		if len(args) == 4 && args[0] == "-Syu" && args[1] == "--noconfirm" && args[2] == "go" {
+		joined := strings.Join(args, " ")
+		if strings.HasPrefix(joined, "-Syu --noconfirm go") {
 			updated = true
 			return nil
 		}

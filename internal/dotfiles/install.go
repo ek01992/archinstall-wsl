@@ -3,6 +3,8 @@ package dotfiles
 import (
 	"fmt"
 	"io/fs"
+	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 )
@@ -13,22 +15,32 @@ var (
 
 	// File/FS seams
 	pathExists = func(path string) bool {
-		_, err := readFile(path)
+		_, err := os.Stat(path)
 		return err == nil
 	}
-	readFile  = func(_ string) ([]byte, error) { return nil, fs.ErrNotExist }
-	writeFile = func(_ string, _ []byte, _ fs.FileMode) error { return nil }
-	listFiles = func(_ string) ([]string, error) { return nil, nil }
-	lstat     = func(_ string) (fs.FileMode, error) { return 0, fs.ErrNotExist }
-	readlink  = func(_ string) (string, error) { return "", fs.ErrNotExist }
-	symlink   = func(_ string, _ string) error { return nil }
+	readFile  = func(path string) ([]byte, error) { return os.ReadFile(path) }
+	writeFile = func(path string, data []byte, perm fs.FileMode) error { return os.WriteFile(path, data, perm) }
+	listFiles = func(dir string) ([]string, error) {
+		entries, err := os.ReadDir(dir)
+		if err != nil {
+			return nil, err
+		}
+		names := make([]string, 0, len(entries))
+		for _, e := range entries {
+			names = append(names, e.Name())
+		}
+		return names, nil
+	}
+	lstat    = func(path string) (fs.FileMode, error) { fi, err := os.Lstat(path); if err != nil { return 0, err }; return fi.Mode(), nil }
+	readlink = func(path string) (string, error) { return os.Readlink(path) }
+	symlink  = func(oldname string, newname string) error { return os.Symlink(oldname, newname) }
 
 	// Command seam
-	runCommand = func(_ string, _ ...string) error { return nil }
+	runCommand = func(name string, args ...string) error { return exec.Command(name, args...).Run() }
 )
 
 // osUserHomeDirImpl is split so tests can override getUserHomeDir only.
-func osUserHomeDirImpl() (string, error) { return "", fmt.Errorf("not implemented") }
+func osUserHomeDirImpl() (string, error) { return os.UserHomeDir() }
 
 // installDotfiles clones repo into ~/.dotfiles when repoURL is provided, then symlinks files
 // to the home directory (skipping README and dot git directories). When repoURL is empty,

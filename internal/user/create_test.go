@@ -297,3 +297,59 @@ func TestCreateUser_FallbackToGpasswdWhenUsermodFails(t *testing.T) {
 		t.Fatalf("expected gpasswd fallback to be called when usermod fails")
 	}
 }
+
+func TestCreateUser_CreatesSudoersDirIfMissing(t *testing.T) {
+	origLookup := lookupUserByName
+	origRun := runCommand
+	origRunWithStdin := runCommandWithStdin
+	origRead := readFile
+	origWrite := writeFile
+	origSudoersD := sudoersDPath
+	origMkdir := mkdirAll
+
+	t.Cleanup(func() {
+		lookupUserByName = origLookup
+		runCommand = origRun
+		runCommandWithStdin = origRunWithStdin
+		readFile = origRead
+		writeFile = origWrite
+		sudoersDPath = origSudoersD
+		mkdirAll = origMkdir
+	})
+
+	lookupUserByName = func(name string) (any, error) { return struct{}{}, nil }
+
+	sudoersDPath = "/fake/etc/sudoers.d"
+	mkdirCalled := false
+	mkdirPath := ""
+	mkdirPerm := fs.FileMode(0)
+	mkdirAll = func(path string, perm fs.FileMode) error { mkdirCalled = true; mkdirPath = path; mkdirPerm = perm; return nil }
+
+	readFile = func(path string) ([]byte, error) { return nil, fs.ErrNotExist }
+	writeFile = func(path string, data []byte, perm fs.FileMode) error { return nil }
+	runCommand = func(name string, args ...string) error { return nil }
+	runCommandWithStdin = func(name string, stdin string, args ...string) error { return nil }
+
+	if err := createUser("dave", "pw"); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !mkdirCalled || mkdirPath != "/fake/etc/sudoers.d" || mkdirPerm != 0o755 {
+		t.Fatalf("expected sudoers dir mkdirAll 0755; got called=%v path=%q perm=%v", mkdirCalled, mkdirPath, mkdirPerm)
+	}
+}
+
+func TestCreateUser_InvalidCredentialsReturnsError(t *testing.T) {
+	origRun := runCommand
+	origRunStdin := runCommandWithStdin
+	t.Cleanup(func() { runCommand = origRun; runCommandWithStdin = origRunStdin })
+
+	runCommand = func(name string, args ...string) error { t.Fatalf("should not run commands"); return nil }
+	runCommandWithStdin = func(name string, stdin string, args ...string) error { t.Fatalf("should not set password"); return nil }
+
+	cases := [][2]string{{"al:ice", "pw"}, {"alice", "bad\nline"}}
+	for _, c := range cases {
+		if err := createUser(c[0], c[1]); err == nil {
+			t.Fatalf("expected error for invalid inputs: %v", c)
+		}
+	}
+}

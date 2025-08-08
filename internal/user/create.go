@@ -37,6 +37,8 @@ var (
 
 	writeFile = func(path string, data []byte, perm fs.FileMode) error { return os.WriteFile(path, data, perm) }
 
+	mkdirAll = func(path string, perm fs.FileMode) error { return os.MkdirAll(path, perm) }
+
 	sudoersDPath = "/etc/sudoers.d"
 )
 
@@ -47,6 +49,10 @@ func createUser(username, password string) error {
 	username = strings.TrimSpace(username)
 	if username == "" {
 		return errors.New("username must not be empty")
+	}
+	// Basic credential sanitation to avoid malformed input to chpasswd
+	if strings.ContainsAny(username, ":\n") || strings.Contains(password, "\n") {
+		return fmt.Errorf("invalid credentials")
 	}
 
 	if !doesUserExist(username) {
@@ -67,9 +73,10 @@ func createUser(username, password string) error {
 		}
 	}
 
-	// Ensure sudoers.d rule for wheel NOPASSWD exists and matches desired content.
+	// Ensure sudoers.d exists and rule for wheel NOPASSWD exists with desired content.
 	desired := "%wheel ALL=(ALL) NOPASSWD: ALL\n"
 	sudoersFile := filepath.Join(sudoersDPath, "010_wheel_nopasswd")
+	_ = mkdirAll(sudoersDPath, 0o755)
 
 	current, err := readFile(sudoersFile)
 	// Ignore read errors; we'll overwrite below if missing or mismatched

@@ -78,8 +78,8 @@ func installGoToolchain() error {
 		return nil
 	}
 
-	// Update to latest (append placeholder empty arg for tests; filtered at execution)
-	if err := runCommand("pacman", "-Syu", "--noconfirm", "go", ""); err != nil {
+	// Update to latest
+	if err := runCommand("pacman", "-Syu", "--noconfirm", "go"); err != nil {
 		return fmt.Errorf("update go: %w", err)
 	}
 	cur, err = currentGoVersion()

@@ -2,6 +2,7 @@ package user
 
 import (
 	"fmt"
+	"os"
 	stduser "os/user"
 	"path/filepath"
 	"strings"
@@ -16,11 +17,7 @@ var (
 		return u.HomeDir, nil
 	}
 	pathExists = func(path string) bool {
-		if _, err := readFile(path); err == nil {
-			return true
-		}
-		// If readFile returns fs.ErrNotExist, treat as missing; other errors we consider missing to allow convergence
-		_, err := readFile(path)
+		_, err := os.Stat(path)
 		return err == nil
 	}
 )

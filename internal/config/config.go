@@ -3,6 +3,7 @@ package config
 import (
 	"fmt"
 	"io/fs"
+	"os"
 	"path/filepath"
 	"strings"
 
@@ -23,9 +24,9 @@ type Config struct {
 
 var (
 	getUserHomeDir = func() (string, error) { return osUserHomeDirImpl() }
-	mkdirAll       = func(path string, perm fs.FileMode) error { return nil }
-	writeFile      = func(path string, data []byte, perm fs.FileMode) error { return nil }
-	readFile       = func(path string) ([]byte, error) { return nil, fs.ErrNotExist }
+	mkdirAll       = func(path string, perm fs.FileMode) error { return os.MkdirAll(path, perm) }
+	writeFile      = func(path string, data []byte, perm fs.FileMode) error { return os.WriteFile(path, data, perm) }
+	readFile       = func(path string) ([]byte, error) { return os.ReadFile(path) }
 )
 
 // saveConfig writes configuration YAML to ~/.config/archwsl-tui-configurator/config.yaml with secure perms
@@ -72,4 +73,4 @@ func loadConfig(path string) Config {
 }
 
 // osUserHomeDirImpl is separated for testing seams.
-func osUserHomeDirImpl() (string, error) { return "", fmt.Errorf("not implemented") }
+func osUserHomeDirImpl() (string, error) { return os.UserHomeDir() }

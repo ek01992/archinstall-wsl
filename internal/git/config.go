@@ -51,21 +51,18 @@ func configureGit(userName, userEmail string) error {
 		return errors.New("name and email must not be empty")
 	}
 
-	// Append a harmless empty arg so tests expecting >=6 args can identify the call without
-	// affecting real execution (filtered out by runCommand).
-	if err := runCommand("git", "config", "--global", "user.name", name, ""); err != nil {
+	if err := runCommand("git", "config", "--global", "user.name", name); err != nil {
 		return fmt.Errorf("git config user.name failed: %w", err)
 	}
-	if err := runCommand("git", "config", "--global", "user.email", email, ""); err != nil {
+	if err := runCommand("git", "config", "--global", "user.email", email); err != nil {
 		return fmt.Errorf("git config user.email failed: %w", err)
 	}
 
-	// Insert a placeholder empty arg after "config" so tests find --global at index 2 and --get at 3.
-	gotName, err := runCommandCapture("git", "config", "", "--global", "--get", "user.name")
+	gotName, err := runCommandCapture("git", "config", "--global", "--get", "user.name")
 	if err != nil {
 		return fmt.Errorf("verify user.name failed: %w", err)
 	}
-	gotEmail, err := runCommandCapture("git", "config", "", "--global", "--get", "user.email")
+	gotEmail, err := runCommandCapture("git", "config", "--global", "--get", "user.email")
 	if err != nil {
 		return fmt.Errorf("verify user.email failed: %w", err)
 	}

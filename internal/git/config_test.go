@@ -27,13 +27,12 @@ func TestConfigureGit_SetsAndVerifies(t *testing.T) {
 		if name != "git" {
 			t.Fatalf("expected git command, got %q", name)
 		}
-		if len(args) >= 1 && args[0] == "config" {
-			if len(args) >= 5 && args[3] == "--get" && args[4] == "user.name" {
-				return "Alice Example\n", nil
-			}
-			if len(args) >= 5 && args[3] == "--get" && args[4] == "user.email" {
-				return "alice@example.com\n", nil
-			}
+		joined := strings.Join(args, " ")
+		if strings.HasPrefix(joined, "config --global --get user.name") {
+			return "Alice Example\n", nil
+		}
+		if strings.HasPrefix(joined, "config --global --get user.email") {
+			return "alice@example.com\n", nil
 		}
 		return "", errors.New("unexpected capture call")
 	}
@@ -45,10 +44,11 @@ func TestConfigureGit_SetsAndVerifies(t *testing.T) {
 	// Validate set calls were issued exactly for name and email
 	var sawName, sawEmail bool
 	for _, c := range calls {
-		if len(c) >= 6 && c[0] == "git" && c[1] == "config" && c[2] == "--global" && c[3] == "user.name" && c[4] == "Alice Example" {
+		args := strings.Join(c[1:], " ")
+		if strings.HasPrefix(args, "config --global user.name Alice Example") {
 			sawName = true
 		}
-		if len(c) >= 6 && c[0] == "git" && c[1] == "config" && c[2] == "--global" && c[3] == "user.email" && c[4] == "alice@example.com" {
+		if strings.HasPrefix(args, "config --global user.email alice@example.com") {
 			sawEmail = true
 		}
 	}
@@ -95,10 +95,11 @@ func TestConfigureGit_VerificationFailureReturnsError(t *testing.T) {
 
 	runCommand = func(name string, args ...string) error { return nil }
 	runCommandCapture = func(name string, args ...string) (string, error) {
-		if len(args) >= 5 && args[0] == "config" && args[2] == "--global" && args[3] == "--get" && args[4] == "user.name" {
+		joined := strings.Join(args, " ")
+		if strings.HasPrefix(joined, "config --global --get user.name") {
 			return "Wrong Name\n", nil
 		}
-		if len(args) >= 5 && args[0] == "config" && args[2] == "--global" && args[3] == "--get" && args[4] == "user.email" {
+		if strings.HasPrefix(joined, "config --global --get user.email") {
 			return "wrong@example.com\n", nil
 		}
 		return "", nil

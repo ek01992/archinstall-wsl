@@ -60,13 +60,12 @@ func TestConfigureGitTx_SuccessDoesNotRollback(t *testing.T) {
 	var curName, curEmail string
 	// After set, verification should return the new values
 	runCommandCapture = func(name string, args ...string) (string, error) {
-		if len(args) >= 1 && args[0] == "config" && len(args) >= 5 && args[3] == "--get" {
-			if args[4] == "user.name" {
-				return curName + "\n", nil
-			}
-			if args[4] == "user.email" {
-				return curEmail + "\n", nil
-			}
+		joined := strings.Join(args, " ")
+		if strings.HasPrefix(joined, "config --global --get user.name") {
+			return curName + "\n", nil
+		}
+		if strings.HasPrefix(joined, "config --global --get user.email") {
+			return curEmail + "\n", nil
 		}
 		return "", nil
 	}

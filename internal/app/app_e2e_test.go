@@ -76,3 +76,56 @@ func TestApp_E2E_ErrorRetryFlow(t *testing.T) {
 		t.Fatalf("expected retry choice, got %q", fm.choice)
 	}
 }
+
+func TestApp_E2E_SuccessQuit(t *testing.T) {
+	origNewProgram := newProgram
+	origNewModel := newModel
+	defer func() { newProgram = origNewProgram; newModel = origNewModel }()
+
+	// Use real UI model; send 'q' to quit
+	newModel = origNewModel
+	newProgram = func(m tea.Model, opts ...tea.ProgramOption) *tea.Program {
+		return tea.NewProgram(m, tea.WithoutRenderer(), tea.WithInput(strings.NewReader("q")))
+	}
+
+	application := New()
+	if err := application.Run(); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestApp_E2E_ErrorSkipThenAbort(t *testing.T) {
+	origNewProgram := newProgram
+	origNewModel := newModel
+	origRunProgram := runProgram
+	defer func() { newProgram = origNewProgram; newModel = origNewModel; runProgram = origRunProgram }()
+
+	newModel = func() tea.Model { return fakeErrorModel{} }
+	// Send 's' first (model quits immediately with skip). For completeness, also ensure abort path works when 'a' sent.
+	newProgram = func(m tea.Model, opts ...tea.ProgramOption) *tea.Program {
+		return tea.NewProgram(m, tea.WithoutRenderer(), tea.WithInput(strings.NewReader("s")))
+	}
+
+	var final tea.Model
+	runProgram = func(p *tea.Program) (tea.Model, error) {
+		fm, err := p.Run()
+		final = fm
+		return fm, err
+	}
+
+	application := New()
+	if err := application.Run(); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if fm, ok := final.(fakeErrorModel); !ok || fm.choice != "skip" {
+		t.Fatalf("expected skip, got %+v", final)
+	}
+
+	// Now drive abort
+	newProgram = func(m tea.Model, opts ...tea.ProgramOption) *tea.Program {
+		return tea.NewProgram(m, tea.WithoutRenderer(), tea.WithInput(strings.NewReader("a")))
+	}
+	if err := application.Run(); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}

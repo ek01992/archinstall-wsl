@@ -1,6 +1,7 @@
 package nerdfont
 
 import (
+	"bufio"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -14,6 +15,14 @@ var (
 	enumerateWindowsFontFiles = func() ([]string, error) {
 		// Probe common mount roots for Windows C: drive fonts
 		if isWSL() {
+			// 1) Probe wsl.conf automount root, if configured
+			if root := strings.TrimSpace(parseWSLAutomountRoot()); root != "" {
+				candidate := filepath.Join(root, "c/Windows/Fonts")
+				if names, err := readFontDir(candidate); err == nil {
+					return names, nil
+				}
+			}
+			// 2) Probe known roots
 			candidates := []string{
 				"/mnt/c/Windows/Fonts",
 				"/c/Windows/Fonts",
@@ -69,6 +78,9 @@ var (
 
 	// isWSL is a seam around platform.IsWSL for tests
 	isWSL = func() bool { return platform.IsWSL() }
+
+	// readFileConf is a seam for reading configuration files like /etc/wsl.conf
+	readFileConf = func(path string) ([]byte, error) { return os.ReadFile(path) }
 )
 
 func registryNerdFontPresent() bool {
@@ -83,6 +95,34 @@ func registryNerdFontPresent() bool {
 	}
 	lower := strings.ToLower(out)
 	return strings.Contains(lower, "nerd font") || strings.Contains(lower, "nerdfont")
+}
+
+// parseWSLAutomountRoot parses /etc/wsl.conf and returns the automount root, if configured.
+func parseWSLAutomountRoot() string {
+	data, err := readFileConf("/etc/wsl.conf")
+	if err != nil || len(data) == 0 {
+		return ""
+	}
+	scanner := bufio.NewScanner(strings.NewReader(string(data)))
+	section := ""
+	root := ""
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		if line == "" || strings.HasPrefix(line, "#") || strings.HasPrefix(line, ";") {
+			continue
+		}
+		if strings.HasPrefix(line, "[") && strings.HasSuffix(line, "]") {
+			section = strings.ToLower(strings.Trim(strings.TrimPrefix(strings.TrimSuffix(line, "]"), "["), " "))
+			continue
+		}
+		if section == "automount" {
+			kv := strings.SplitN(line, "=", 2)
+			if len(kv) == 2 && strings.TrimSpace(strings.ToLower(kv[0])) == "root" {
+				root = strings.TrimSpace(kv[1])
+			}
+		}
+	}
+	return strings.TrimSpace(root)
 }
 
 // detectNerdFontInstalled returns true if any installed Windows font filename indicates a Nerd Font.

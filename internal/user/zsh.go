@@ -4,6 +4,8 @@ import (
 	"fmt"
 	stduser "os/user"
 	"strings"
+
+	"archwsl-tui-configurator/internal/logx"
 )
 
 var (
@@ -34,10 +36,13 @@ func installZsh() error {
 		return nil
 	}
 
+	logx.Info("setting default shell", "user", username, "shell", zshPath)
 	// Try chsh first
 	if err := runCommand("chsh", "-s", zshPath, username); err != nil {
+		logx.Warn("chsh failed; falling back to usermod", "err", err)
 		// Fallback to usermod
 		if err2 := runCommand("usermod", "-s", zshPath, username); err2 != nil {
+			logx.Error("usermod failed setting shell", "err", err2)
 			return fmt.Errorf("usermod set shell: %w", err2)
 		}
 	}
@@ -46,8 +51,10 @@ func installZsh() error {
 	for i := 0; i < 2; i++ {
 		newShell := strings.TrimSpace(getDefaultShell(username))
 		if strings.HasSuffix(newShell, "/zsh") {
+			logx.Info("default shell set to zsh", "user", username)
 			return nil
 		}
 	}
+	logx.Error("verification failed setting shell", "user", username, "expected", "zsh", "got", strings.TrimSpace(getDefaultShell(username)))
 	return fmt.Errorf("verification failed: expected zsh, got %q", strings.TrimSpace(getDefaultShell(username)))
 }

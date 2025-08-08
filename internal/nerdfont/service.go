@@ -1,6 +1,7 @@
 package nerdfont
 
 import (
+	"bufio"
 	"path/filepath"
 	"strings"
 )
@@ -21,9 +22,32 @@ type Service struct { p Platform; fs FS; r Runner }
 
 func NewService(p Platform, fs FS, r Runner) *Service { return &Service{p: p, fs: fs, r: r} }
 
+func parseWSLAutomountRootFromFS(fs FS) string {
+	data, err := fs.ReadFile("/etc/wsl.conf")
+	if err != nil || len(data) == 0 { return "" }
+	s := bufio.NewScanner(strings.NewReader(string(data)))
+	section := ""
+	root := ""
+	for s.Scan() {
+		line := strings.TrimSpace(s.Text())
+		if line == "" || strings.HasPrefix(line, "#") || strings.HasPrefix(line, ";") { continue }
+		if strings.HasPrefix(line, "[") && strings.HasSuffix(line, "]") {
+			section = strings.ToLower(strings.Trim(strings.TrimPrefix(strings.TrimSuffix(line, "]"), "["), " "))
+			continue
+		}
+		if section == "automount" {
+			kv := strings.SplitN(line, "=", 2)
+			if len(kv) == 2 && strings.TrimSpace(strings.ToLower(kv[0])) == "root" {
+				root = strings.TrimSpace(kv[1])
+			}
+		}
+	}
+	return strings.TrimSpace(root)
+}
+
 func (s *Service) Detect() bool {
 	if !s.p.IsWSL() { return false }
-	root := parseWSLAutomountRoot()
+	root := parseWSLAutomountRootFromFS(s.fs)
 	candidates := []string{}
 	if strings.TrimSpace(root) != "" { candidates = append(candidates, filepath.Join(root, "c/Windows/Fonts")) }
 	candidates = append(candidates, "/mnt/c/Windows/Fonts", "/c/Windows/Fonts", "/mnt/host/c/Windows/Fonts")

@@ -125,9 +125,8 @@ func parseWSLAutomountRoot() string {
 	return strings.TrimSpace(root)
 }
 
-// detectNerdFontInstalled returns true if any installed Windows font filename indicates a Nerd Font.
-// The check is case-insensitive and looks for the token "nerd font" in the filename.
-func detectNerdFontInstalled() bool {
+// legacyDetectNerdFontInstalled is the previous name to avoid duplicate symbol; legacy.go provides a wrapper.
+func legacyDetectNerdFontInstalled() bool {
 	files, err := enumerateWindowsFontFiles()
 	if err != nil {
 		// Best-effort registry fallback when direct enumeration fails

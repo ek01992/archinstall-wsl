@@ -6,7 +6,20 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 )
 
-type Model struct{}
+type errorChoice int
+
+const (
+	choiceNone errorChoice = iota
+	choiceRetry
+	choiceSkip
+	choiceAbort
+)
+
+type Model struct{
+	errActive bool
+	errMsg    string
+	errChoice errorChoice
+}
 
 func New() tea.Model {
 	return Model{}
@@ -19,6 +32,22 @@ func (m Model) Init() tea.Cmd {
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
+		if m.errActive {
+			switch msg.String() {
+			case "r":
+				m.errChoice = choiceRetry
+				return m, tea.Quit
+			case "s":
+				m.errChoice = choiceSkip
+				return m, tea.Quit
+			case "a":
+				m.errChoice = choiceAbort
+				return m, tea.Quit
+			case "ctrl+c", "q", "esc":
+				m.errChoice = choiceAbort
+				return m, tea.Quit
+			}
+		}
 		switch msg.String() {
 		case "ctrl+c", "q", "esc":
 			return m, tea.Quit
@@ -28,6 +57,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m Model) View() string {
+	if m.errActive {
+		var b strings.Builder
+		b.WriteString("ArchWSL TUI Configurator\n\n")
+		b.WriteString("Error: ")
+		b.WriteString(strings.TrimSpace(m.errMsg))
+		b.WriteString("\n\n")
+		b.WriteString("[r]etry  [s]kip  [a]bort\n")
+		return b.String()
+	}
 	var b strings.Builder
 	b.WriteString("ArchWSL TUI Configurator\n")
 	b.WriteString("\n")

@@ -85,8 +85,6 @@ func importSSHKeysFromWindows(hostPath string) error {
 				_ = chmod(dst, mode)
 				continue
 			}
-		} else if !errors.Is(err, fs.ErrNotExist) {
-			// Unexpected read error; attempt to overwrite anyway to converge
 		}
 
 		if err := writeFile(dst, srcBytes, mode); err != nil {

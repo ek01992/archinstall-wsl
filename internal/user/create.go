@@ -72,12 +72,8 @@ func createUser(username, password string) error {
 	sudoersFile := filepath.Join(sudoersDPath, "010_wheel_nopasswd")
 
 	current, err := readFile(sudoersFile)
-	if err != nil {
-		if !errors.Is(err, fs.ErrNotExist) {
-			// For unexpected read errors, attempt to overwrite to desired state anyway.
-			// We do not return here to try to converge to the desired state.
-		}
-	}
+	// Ignore read errors; we'll overwrite below if missing or mismatched
+	_ = err
 
 	if string(current) != desired {
 		if err := writeFile(sudoersFile, []byte(desired), 0o440); err != nil {

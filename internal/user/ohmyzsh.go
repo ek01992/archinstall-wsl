@@ -66,8 +66,6 @@ func installOhMyZsh(username string, theme string, plugins []string) error {
 		if string(current) == desired {
 			return nil
 		}
-	} else if !errorsIs(err, fs.ErrNotExist) {
-		// Unexpected read error; attempt to converge by writing desired content
 	}
 
 	if err := writeFile(zshrc, []byte(desired), 0o644); err != nil {

@@ -26,6 +26,9 @@ const zshPath = "/usr/bin/zsh"
 // It first checks the current shell and performs no action if already zsh.
 // It tries `chsh -s /usr/bin/zsh <user>` and falls back to `usermod -s /usr/bin/zsh <user>`.
 func installZsh() error {
+	if defaultService != nil {
+		return defaultService.InstallZsh()
+	}
 	username := strings.TrimSpace(getTargetUsername())
 	if username == "" {
 		return fmt.Errorf("empty target user")

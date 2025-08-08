@@ -8,6 +8,9 @@ import (
 
 // installZshTx sets zsh and restores previous shell on failure.
 func installZshTx() (err error) {
+	if defaultService != nil {
+		return defaultService.InstallZshTx()
+	}
 	tr := tx.New()
 	defer func() {
 		if err != nil {

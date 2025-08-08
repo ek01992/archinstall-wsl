@@ -26,6 +26,10 @@ var (
 	}
 
 	runCommandWithStdin = func(name string, stdin string, args ...string) error {
+		// Delegate to defaultService if available to avoid duplicate behaviors
+		if defaultService != nil {
+			return defaultService.cmd.RunWithStdin(name, stdin, args...)
+		}
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
 		cmd := exec.CommandContext(ctx, name, args...)
@@ -50,6 +54,10 @@ var (
 // the wheel group, and enables passwordless sudo for wheel via sudoers.d. It is
 // idempotent: safe to call repeatedly.
 func createUser(username, password string) error {
+	// Delegate to DI service to centralize logic
+	if defaultService != nil {
+		return defaultService.CreateUser(username, password)
+	}
 	username = strings.TrimSpace(username)
 	if username == "" {
 		return errors.New("username must not be empty")

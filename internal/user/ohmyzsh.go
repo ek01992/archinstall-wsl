@@ -37,6 +37,9 @@ func buildZshrc(theme string, plugins []string) string {
 // installOhMyZsh installs oh-my-zsh for the given user and ensures .zshrc reflects
 // the provided theme and plugins. Idempotent: no writes if already in desired state.
 func installOhMyZsh(username string, theme string, plugins []string) error {
+	if defaultService != nil {
+		return defaultService.InstallOhMyZsh(username, theme, plugins)
+	}
 	username = strings.TrimSpace(username)
 	if username == "" {
 		return fmt.Errorf("username must not be empty")

@@ -35,6 +35,7 @@ NonInteractive: true
 ```
 
 Notes:
+
 - `NonInteractive: true` guides the application to apply saved values without prompts
 - When `DotfilesRepo` is empty, a default `.zshrc` is written
 

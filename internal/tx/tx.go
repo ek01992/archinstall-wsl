@@ -1,6 +1,6 @@
 package tx
 
-import "log"
+import "archwsl-tui-configurator/internal/logx"
 
 // Action represents a compensating action to revert a prior change.
 type Action func() error
@@ -34,7 +34,7 @@ func (t *Transaction) Rollback() error {
 	for i := len(t.undos) - 1; i >= 0; i-- {
 		if err := t.undos[i](); err != nil {
 			// Log every rollback error for observability
-			log.Printf("tx rollback error: %v", err)
+			logx.Error("tx rollback error", "err", err)
 			agg.append(err)
 		}
 	}

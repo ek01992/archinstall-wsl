@@ -1,0 +1,15 @@
+# Binaries
+/bin/
+*.exe
+*.log
+*.out
+
+# Go build
+/dist/
+coverage.txt
+
+# IDEs
+.vscode/
+.idea/
+.aidigestignore
+.cursor/

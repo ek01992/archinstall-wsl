@@ -1,5 +1,7 @@
 package ssh
 
+// Legacy tests: to be removed after DI migration.
+
 import (
 	"io/fs"
 	"path/filepath"

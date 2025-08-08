@@ -1,5 +1,7 @@
 package ssh
 
+// Legacy tests: to be removed after DI migration.
+
 import "testing"
 
 func TestImportSSHKeysWithConsent_Decline_NoCalls(t *testing.T) {
@@ -33,12 +35,16 @@ func TestImportSSHKeysWithConsent_Succeeds(t *testing.T) {
 	called := false
 	importSSHKeys = func(hostPath string) error {
 		called = true
-		if hostPath != "/mnt/c/Users/Alice/.ssh" { t.Fatalf("unexpected hostPath: %q", hostPath) }
+		if hostPath != "/mnt/c/Users/Alice/.ssh" {
+			t.Fatalf("unexpected hostPath: %q", hostPath)
+		}
 		return nil
 	}
 	canEditHostFiles = func() bool { return true }
 	if err := importSSHKeysWithConsent("/mnt/c/Users/Alice/.ssh", true); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if !called { t.Fatalf("expected underlying import to be called") }
+	if !called {
+		t.Fatalf("expected underlying import to be called")
+	}
 }

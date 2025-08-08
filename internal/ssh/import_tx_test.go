@@ -1,5 +1,7 @@
 package ssh
 
+// Legacy tests: to be removed after DI migration.
+
 import (
 	"io/fs"
 	"path/filepath"
@@ -48,7 +50,9 @@ func TestImportSSHKeysFromWindowsTx_RollsBackOnFailure(t *testing.T) {
 	}
 	// Pretend previous mode was 0644 for id_ed25519.pub
 	lstatMode = func(path string) (fs.FileMode, error) {
-		if strings.HasSuffix(path, "/id_ed25519.pub") { return 0o644, nil }
+		if strings.HasSuffix(path, "/id_ed25519.pub") {
+			return 0o644, nil
+		}
 		return 0o600, nil
 	}
 

@@ -2,13 +2,16 @@
 
 GO ?= go
 
-all: tidy vet test
+all: tidy lint vet test
 
 mod:
 	$(GO) mod download
 
 tidy:
 	$(GO) mod tidy
+
+lint:
+	golangci-lint run ./...
 
 vet:
 	$(GO) vet ./...

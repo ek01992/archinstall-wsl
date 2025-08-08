@@ -1,6 +1,9 @@
 package user
 
-import "testing"
+import (
+	"errors"
+	"testing"
+)
 
 func TestDoesUserExist_TrueWhenLookupSucceeds(t *testing.T) {
 	orig := lookupUserByName
@@ -27,7 +30,8 @@ func TestDoesUserExist_FalseWhenLookupFails(t *testing.T) {
 	orig := lookupUserByName
 	t.Cleanup(func() { lookupUserByName = orig })
 
-	lookupUserByName = func(name string) (any, error) { return nil, assertErr }
+	someErr := errors.New("lookup failed")
+	lookupUserByName = func(name string) (any, error) { return nil, someErr }
 	if doesUserExist("bob") {
 		t.Fatalf("expected false when lookup fails")
 	}

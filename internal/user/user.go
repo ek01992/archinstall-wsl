@@ -6,8 +6,6 @@ import (
 )
 
 var (
-	// assertErr is an arbitrary error used in tests to simulate lookup failure.
-	assertErr error = stduser.UnknownUserError("unknown")
 	lookupUserByName = func(name string) (any, error) {
 		_, err := stduser.Lookup(name)
 		return struct{}{}, err

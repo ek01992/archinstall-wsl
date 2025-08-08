@@ -2,6 +2,7 @@ package pacman
 
 import (
 	"context"
+	"io"
 	"os/exec"
 	"strings"
 	"time"
@@ -14,8 +15,8 @@ var queryLocalPackage = func(pkg string) error {
 
 	cmd := exec.CommandContext(ctx, "pacman", "-Q", pkg)
 	// We only care about exit status; suppress output to avoid noise in WSL.
-	cmd.Stdout = nil
-	cmd.Stderr = nil
+	cmd.Stdout = io.Discard
+	cmd.Stderr = io.Discard
 	return cmd.Run()
 }
 

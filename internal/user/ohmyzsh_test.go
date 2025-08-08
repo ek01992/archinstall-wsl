@@ -1,5 +1,7 @@
 package user
 
+// Legacy tests: to be removed after DI migration.
+
 import (
 	"io/fs"
 	"strings"

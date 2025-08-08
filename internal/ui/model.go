@@ -1,10 +1,12 @@
 package ui
 
 import (
+	"strings"
+
 	tea "github.com/charmbracelet/bubbletea"
 )
 
-type Model struct {}
+type Model struct{}
 
 func New() tea.Model {
 	return Model{}
@@ -26,5 +28,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m Model) View() string {
-	return "ArchWSL TUI Configurator\n\nThis is a placeholder view.\n\nPress q to quit."
+	var b strings.Builder
+	b.WriteString("ArchWSL TUI Configurator\n")
+	b.WriteString("\n")
+	b.WriteString("Provision an idempotent, repeatable Arch Linux environment on WSL2.\n")
+	b.WriteString("Safe to re-run anytime; changes only when needed.\n")
+	b.WriteString("\n")
+	b.WriteString("Press q to quit.")
+	return b.String()
 }

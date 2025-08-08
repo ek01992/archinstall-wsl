@@ -7,14 +7,17 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 )
 
-func TestNewModelViewContainsPlaceholder(t *testing.T) {
+func TestNewModelViewContainsTitleAndDescription(t *testing.T) {
 	m := New()
 	v := m.View()
 	if !strings.Contains(v, "ArchWSL TUI Configurator") {
 		t.Fatalf("view missing app title; got: %q", v)
 	}
-	if !strings.Contains(v, "placeholder") {
-		t.Fatalf("view missing placeholder text; got: %q", v)
+	if !strings.Contains(v, "idempotent") {
+		t.Fatalf("view missing idempotent description; got: %q", v)
+	}
+	if !strings.Contains(v, "Press q to quit") {
+		t.Fatalf("view missing quit hint; got: %q", v)
 	}
 }
 

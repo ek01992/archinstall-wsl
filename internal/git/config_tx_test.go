@@ -40,10 +40,10 @@ func TestConfigureGitTx_RollsBackOnFailure(t *testing.T) {
 	foundName := false
 	foundEmail := false
 	for _, c := range calls {
-		if strings.Contains(c, "git config --global user.name Old Name") {
+		if strings.Contains(c, "git config --global --unset user.name") || strings.Contains(c, "git config --global user.name Old Name") {
 			foundName = true
 		}
-		if strings.Contains(c, "git config --global user.email old@example.com") {
+		if strings.Contains(c, "git config --global --unset user.email") || strings.Contains(c, "git config --global user.email old@example.com") {
 			foundEmail = true
 		}
 	}
@@ -60,11 +60,11 @@ func TestConfigureGitTx_SuccessDoesNotRollback(t *testing.T) {
 	var curName, curEmail string
 	// After set, verification should return the new values
 	runCommandCapture = func(name string, args ...string) (string, error) {
-		if len(args) >= 1 && args[0] == "config" && len(args) >= 4 && args[2] == "--get" {
-			if args[3] == "user.name" {
+		if len(args) >= 1 && args[0] == "config" && len(args) >= 5 && args[3] == "--get" {
+			if args[4] == "user.name" {
 				return curName + "\n", nil
 			}
-			if args[3] == "user.email" {
+			if args[4] == "user.email" {
 				return curEmail + "\n", nil
 			}
 		}

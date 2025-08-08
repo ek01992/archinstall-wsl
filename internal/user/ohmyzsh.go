@@ -2,7 +2,6 @@ package user
 
 import (
 	"fmt"
-	"io/fs"
 	stduser "os/user"
 	"path/filepath"
 	"strings"
@@ -79,16 +78,4 @@ func installOhMyZsh(username string, theme string, plugins []string) error {
 	}
 
 	return nil
-}
-
-// errorsIs is a tiny wrapper to avoid importing errors for a single use when tests stub readFile.
-func errorsIs(err error, target error) bool {
-	if err == nil {
-		return target == nil
-	}
-	// Crude check: compare error strings when fs.ErrNotExist is the target
-	if target == fs.ErrNotExist {
-		return strings.Contains(err.Error(), "no such file or directory") || strings.Contains(err.Error(), "file does not exist") || err == fs.ErrNotExist
-	}
-	return err == target
 }

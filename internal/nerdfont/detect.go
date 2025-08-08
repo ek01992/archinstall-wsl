@@ -12,11 +12,28 @@ import (
 var (
 	// enumerateWindowsFontFiles lists font filenames from the Windows Fonts directory via WSL mount.
 	enumerateWindowsFontFiles = func() ([]string, error) {
-		if !platform.CanEditHostFiles() {
-			return nil, os.ErrNotExist
+		// First attempt direct mount
+		if platform.CanEditHostFiles() {
+			fontsDir := "/mnt/c/Windows/Fonts"
+			if names, err := readFontDir(fontsDir); err == nil {
+				return names, nil
+			}
 		}
-		fontsDir := "/mnt/c/Windows/Fonts"
-		entries, err := os.ReadDir(fontsDir)
+		// Alternate path probing via wslpath if running under WSL
+		if platform.IsWSL() {
+			if p, err := runWSLCapture("-u", "C:\\Windows\\Fonts"); err == nil {
+				path := strings.TrimSpace(p)
+				if names, err2 := readFontDir(path); err2 == nil {
+					return names, nil
+				}
+			}
+		}
+		return nil, os.ErrNotExist
+	}
+
+	// readFontDir reads filenames in a directory (seam for testing)
+	readFontDir = func(dir string) ([]string, error) {
+		entries, err := os.ReadDir(dir)
 		if err != nil {
 			return nil, err
 		}
@@ -33,6 +50,13 @@ var (
 	// runPSCapture runs a PowerShell command (available in WSL environments) and returns stdout.
 	runPSCapture = func(args ...string) (string, error) {
 		cmd := exec.Command("powershell.exe", args...)
+		out, err := cmd.CombinedOutput()
+		return string(out), err
+	}
+
+	// runWSLCapture runs wslpath or similar WSL utilities
+	runWSLCapture = func(args ...string) (string, error) {
+		cmd := exec.Command("wslpath", args...)
 		out, err := cmd.CombinedOutput()
 		return string(out), err
 	}

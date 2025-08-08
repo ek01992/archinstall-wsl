@@ -70,10 +70,11 @@ func (s *Service) ConfigureTx() error {
 		undos = append(undos, func() error { return s.r.Run("ufw", "disable") })
 	}
 	if err := s.Configure(); err != nil {
-		for i := len(undos) - 1; i >= 0; i-- { _ = undos[i]() }
+		for i := len(undos) - 1; i >= 0; i-- {
+			_ = undos[i]()
+		}
 		return err
 	}
-	undos = nil
 	_ = time.Second // keep time import
 	return nil
 }

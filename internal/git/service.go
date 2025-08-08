@@ -49,9 +49,6 @@ func (s *Service) ConfigureTx(userName, userEmail string) error {
 
 	type undo func() error
 	var undos []undo
-	defer func() {
-		// no-op; real tx aggregation lives in internal/tx; this is lightweight local
-	}()
 	undos = append(undos, func() error {
 		if prevName == "" {
 			_ = s.r.Run("git", "config", "--global", "--unset", "user.name")
@@ -73,7 +70,6 @@ func (s *Service) ConfigureTx(userName, userEmail string) error {
 		}
 		return err
 	}
-	// commit: drop undos
-	undos = nil
+	// commit
 	return nil
 }

@@ -16,15 +16,15 @@ var (
 		_, err := readFile(path)
 		return err == nil
 	}
-	readFile  = func(path string) ([]byte, error) { return nil, fs.ErrNotExist }
-	writeFile = func(path string, data []byte, perm fs.FileMode) error { return nil }
-	listFiles = func(dir string) ([]string, error) { return nil, nil }
-	lstat     = func(path string) (fs.FileMode, error) { return 0, fs.ErrNotExist }
-	readlink  = func(path string) (string, error) { return "", fs.ErrNotExist }
-	symlink   = func(oldname, newname string) error { return nil }
+	readFile  = func(_ string) ([]byte, error) { return nil, fs.ErrNotExist }
+	writeFile = func(_ string, _ []byte, _ fs.FileMode) error { return nil }
+	listFiles = func(_ string) ([]string, error) { return nil, nil }
+	lstat     = func(_ string) (fs.FileMode, error) { return 0, fs.ErrNotExist }
+	readlink  = func(_ string) (string, error) { return "", fs.ErrNotExist }
+	symlink   = func(_ string, _ string) error { return nil }
 
 	// Command seam
-	runCommand = func(name string, args ...string) error { return nil }
+	runCommand = func(_ string, _ ...string) error { return nil }
 )
 
 // osUserHomeDirImpl is split so tests can override getUserHomeDir only.

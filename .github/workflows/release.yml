@@ -1,0 +1,40 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.24.x'
+          cache: true
+
+      - name: Build linux/amd64
+        run: |
+          mkdir -p dist
+          GOOS=linux GOARCH=amd64 go build -o dist/archwsl-tui-configurator-linux-amd64 ./cmd/archwsl-tui-configurator
+
+      - name: Build linux/arm64
+        run: |
+          GOOS=linux GOARCH=arm64 go build -o dist/archwsl-tui-configurator-linux-arm64 ./cmd/archwsl-tui-configurator
+
+      - name: Create release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/archwsl-tui-configurator-linux-amd64
+            dist/archwsl-tui-configurator-linux-arm64
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

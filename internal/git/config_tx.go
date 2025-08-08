@@ -9,7 +9,11 @@ import (
 // configureGitTx sets git config with rollback to prior values on failure.
 func configureGitTx(userName, userEmail string) (err error) {
 	tr := tx.New()
-	defer func() { if err != nil { _ = tr.Rollback() } }()
+	defer func() {
+		if err != nil {
+			_ = tr.Rollback()
+		}
+	}()
 
 	prevName, _ := runCommandCapture("git", "config", "--global", "--get", "user.name")
 	prevEmail, _ := runCommandCapture("git", "config", "--global", "--get", "user.email")

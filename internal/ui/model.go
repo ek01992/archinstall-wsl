@@ -15,7 +15,7 @@ const (
 	choiceAbort
 )
 
-type Model struct{
+type Model struct {
 	errActive bool
 	errMsg    string
 	errChoice errorChoice

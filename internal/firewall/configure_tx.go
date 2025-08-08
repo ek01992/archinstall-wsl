@@ -9,7 +9,11 @@ import (
 // configureFirewallTx ensures firewall configuration with rollback on failure.
 func configureFirewallTx() (err error) {
 	tr := tx.New()
-	defer func() { if err != nil { _ = tr.Rollback() } }()
+	defer func() {
+		if err != nil {
+			_ = tr.Rollback()
+		}
+	}()
 
 	// Capture initial status output to detect whether ufw was active
 	status, _ := runCommandCapture("ufw", "status")

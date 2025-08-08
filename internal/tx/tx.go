@@ -5,7 +5,7 @@ type Action func() error
 
 // Transaction records compensating actions to rollback on failure.
 type Transaction struct {
-	undos    []Action
+	undos     []Action
 	committed bool
 }
 

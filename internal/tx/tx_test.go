@@ -7,7 +7,14 @@ func TestTransaction_RollbackLIFOAndStopOnFirstError(t *testing.T) {
 	order := []int{}
 	tr.Defer(func() error { order = append(order, 1); return nil })
 	err2 := false
-	tr.Defer(func() error { order = append(order, 2); if !err2 { err2 = true; return assertErr }; return nil })
+	tr.Defer(func() error {
+		order = append(order, 2)
+		if !err2 {
+			err2 = true
+			return assertErr
+		}
+		return nil
+	})
 	tr.Defer(func() error { order = append(order, 3); return nil })
 
 	if err := tr.Rollback(); err == nil {

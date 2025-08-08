@@ -10,7 +10,11 @@ import (
 // importSSHKeysFromWindowsTx wraps import with rollback for each file.
 func importSSHKeysFromWindowsTx(hostPath string) (err error) {
 	tr := tx.New()
-	defer func() { if err != nil { _ = tr.Rollback() } }()
+	defer func() {
+		if err != nil {
+			_ = tr.Rollback()
+		}
+	}()
 
 	home, herr := getUserHomeDir()
 	if herr != nil {

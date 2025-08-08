@@ -13,7 +13,12 @@ func TestCreateUserTx_RollsBackOnFailure(t *testing.T) {
 	origRead := readFile
 	origExist := lookupUserByName
 
-	t.Cleanup(func() { runCommand = origRun; runCommandWithStdin = origRunStdin; readFile = origRead; lookupUserByName = origExist })
+	t.Cleanup(func() {
+		runCommand = origRun
+		runCommandWithStdin = origRunStdin
+		readFile = origRead
+		lookupUserByName = origExist
+	})
 
 	// User does not exist initially
 	lookupUserByName = func(name string) (any, error) { return nil, errors.New("no") }
@@ -68,7 +73,13 @@ func TestCreateUserTx_SuccessDoesNotRollback(t *testing.T) {
 	origWrite := writeFile
 	origExist := lookupUserByName
 
-	t.Cleanup(func() { runCommand = origRun; runCommandWithStdin = origRunStdin; readFile = origRead; writeFile = origWrite; lookupUserByName = origExist })
+	t.Cleanup(func() {
+		runCommand = origRun
+		runCommandWithStdin = origRunStdin
+		readFile = origRead
+		writeFile = origWrite
+		lookupUserByName = origExist
+	})
 
 	lookupUserByName = func(name string) (any, error) { return nil, errors.New("no") }
 

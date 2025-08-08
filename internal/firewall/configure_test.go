@@ -1,5 +1,7 @@
 package firewall
 
+// Legacy tests: to be removed after DI migration.
+
 import (
 	"errors"
 	"strings"

@@ -4,11 +4,16 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"archwsl-tui-configurator/internal/platform"
 )
 
 var (
 	// enumerateWindowsFontFiles lists font filenames from the Windows Fonts directory via WSL mount.
 	enumerateWindowsFontFiles = func() ([]string, error) {
+		if !platform.CanEditHostFiles() {
+			return nil, os.ErrNotExist
+		}
 		fontsDir := "/mnt/c/Windows/Fonts"
 		entries, err := os.ReadDir(fontsDir)
 		if err != nil {

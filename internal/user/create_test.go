@@ -353,3 +353,41 @@ func TestCreateUser_InvalidCredentialsReturnsError(t *testing.T) {
 		}
 	}
 }
+
+func TestCreateUser_SudoersValidationFailurePreventsWrite(t *testing.T) {
+	origLookup := lookupUserByName
+	origRun := runCommand
+	origRunWithStdin := runCommandWithStdin
+	origRead := readFile
+	origWrite := writeFile
+	origValidate := validateSudoersContent
+	origSudoersD := sudoersDPath
+
+	t.Cleanup(func() {
+		lookupUserByName = origLookup
+		runCommand = origRun
+		runCommandWithStdin = origRunWithStdin
+		readFile = origRead
+		writeFile = origWrite
+		validateSudoersContent = origValidate
+		sudoersDPath = origSudoersD
+	})
+
+	lookupUserByName = func(name string) (any, error) { return nil, errors.New("not found") }
+	runCommand = func(name string, args ...string) error { return nil }
+	runCommandWithStdin = func(name string, stdin string, args ...string) error { return nil }
+	readFile = func(path string) ([]byte, error) { return nil, fs.ErrNotExist }
+
+	wrote := false
+	writeFile = func(path string, data []byte, perm fs.FileMode) error { wrote = true; return nil }
+	validateSudoersContent = func(content string) error { return errors.New("invalid sudoers") }
+
+	sudoersDPath = "/fake/etc/sudoers.d"
+
+	if err := createUser("erin", "pw"); err == nil {
+		t.Fatalf("expected error when sudoers validation fails")
+	}
+	if wrote {
+		t.Fatalf("did not expect sudoers file to be written when validation fails")
+	}
+}

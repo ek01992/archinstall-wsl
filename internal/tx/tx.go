@@ -1,5 +1,7 @@
 package tx
 
+import "log"
+
 // Action represents a compensating action to revert a prior change.
 type Action func() error
 
@@ -23,18 +25,39 @@ func (t *Transaction) Defer(a Action) {
 // Commit marks the transaction as successful; discards undo actions.
 func (t *Transaction) Commit() { t.committed = true; t.undos = nil }
 
-// Rollback executes registered undo actions in reverse order and returns the first error encountered.
+// Rollback executes registered undo actions in reverse order and returns an aggregated error if any occurred.
 func (t *Transaction) Rollback() error {
 	if t == nil || t.committed {
 		return nil
 	}
-	var firstErr error
+	var agg multiError
 	for i := len(t.undos) - 1; i >= 0; i-- {
-		if err := t.undos[i](); err != nil && firstErr == nil {
-			firstErr = err
+		if err := t.undos[i](); err != nil {
+			// Log every rollback error for observability
+			log.Printf("tx rollback error: %v", err)
+			agg.append(err)
 		}
 	}
 	// Clear after rollback
 	t.undos = nil
-	return firstErr
+	if agg.len() == 0 {
+		return nil
+	}
+	return agg
+}
+
+type multiError struct{ errs []error }
+
+func (m *multiError) append(err error) { m.errs = append(m.errs, err) }
+func (m *multiError) len() int         { return len(m.errs) }
+
+func (m multiError) Error() string {
+	if len(m.errs) == 1 {
+		return m.errs[0].Error()
+	}
+	msg := "rollback encountered multiple errors:"
+	for _, e := range m.errs {
+		msg += " " + e.Error() + ";"
+	}
+	return msg
 }

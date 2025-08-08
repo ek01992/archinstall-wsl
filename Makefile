@@ -1,11 +1,18 @@
-.PHONY: tidy test vet lint build all
+.PHONY: tidy test vet lint build all check-go
 
 GO ?= go
+GOVERSION ?= 1.24.6
 
 all: tidy lint vet test
 
 mod:
 	$(GO) mod download
+
+check-go:
+	@v=$$($(GO) version | awk '{print $$3}'); \
+	if [ "$$v" != "go$(GOVERSION)" ]; then \
+		echo "WARNING: Go version $$v != go$(GOVERSION). Recommended: $(GOVERSION)"; \
+	fi
 
 tidy:
 	$(GO) mod tidy

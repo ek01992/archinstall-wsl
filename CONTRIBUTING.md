@@ -7,7 +7,7 @@ Thanks for your interest in improving this project! This document explains how t
 Prerequisites:
 
 - Arch Linux or compatible Linux environment (WSL 2 recommended for parity)
-- Go 1.24.6+
+- Go 1.24.6 (pinned)
 - Git
 
 Clone and build:
@@ -15,7 +15,7 @@ Clone and build:
 ```bash
 git clone https://github.com/your-org/archwsl-tui-configurator.git
 cd archwsl-tui-configurator
-make all     # tidy, lint, vet, test (auto-installs golangci-lint if missing)
+make check-go && make all     # tidy, lint, vet, test (auto-installs golangci-lint if missing)
 ```
 
 Useful commands:
@@ -32,6 +32,7 @@ Notes:
 
 - Tests use seams/mocks to avoid touching real system state. You do NOT need root to run tests.
 - Ensure `$(go env GOPATH)/bin` is on your PATH if you call `staticcheck` directly.
+- Go version is pinned in CI and docs for reproducibility. Use `make check-go` to verify your local version.
 
 ## Branching Strategy
 

@@ -69,6 +69,13 @@ name = "Dotfiles"
 commands = ["echo setup"]
 ```
 
+## WSL-specific operations
+
+- Host file access: The app detects if `/mnt/c` is mounted (typical in WSL) before attempting operations that read Windows files (fonts, SSH keys). If not available, these steps are skipped with guidance.
+- SSH import consent: Importing private keys from the Windows host is gated by explicit user consent in interactive flows. Declining will skip the import.
+- `ufw` firewall: Behavior can vary in WSL. If unsupported, consider configuring Windows Defender Firewall rules on the host instead.
+- `.wslconfig`: Changes should be applied on Windows. Prefer generating a plan and applying via PowerShell.
+
 ## Troubleshooting
 
 - Run as root for first-time provisioning

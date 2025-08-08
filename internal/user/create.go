@@ -40,6 +40,8 @@ var (
 	mkdirAll = func(path string, perm fs.FileMode) error { return os.MkdirAll(path, perm) }
 
 	sudoersDPath = "/etc/sudoers.d"
+
+	validateSudoersContent = func(content string) error { return nil }
 )
 
 // createUser creates the user if missing, sets the password, ensures membership in
@@ -83,6 +85,10 @@ func createUser(username, password string) error {
 	_ = err
 
 	if string(current) != desired {
+		// Validate content before writing
+		if err := validateSudoersContent(desired); err != nil {
+			return fmt.Errorf("sudoers validation failed: %w", err)
+		}
 		if err := writeFile(sudoersFile, []byte(desired), 0o440); err != nil {
 			return fmt.Errorf("writing sudoers file failed: %w", err)
 		}

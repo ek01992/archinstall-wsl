@@ -25,8 +25,15 @@ This tool turns the manual post-install process into a reliable, test-driven, an
 ## Requirements
 
 - Arch Linux on WSL 2 (Windows 11 recommended)
-- Go 1.24.6+
+- Go 1.24.6 (pinned)
 - Git and internet connectivity
+
+## Environment assumptions and safety notes
+
+- WSL host file access: Operations that read Windows files (e.g., fonts under `/mnt/c/Windows/Fonts`, SSH keys under `/mnt/c/Users/<User>/.ssh`) require that `/mnt/c` is mounted and accessible. The app detects this and falls back safely if unavailable.
+- SSH private key import: Copying private keys is sensitive. The library exposes a consent-gated flow; interactive UIs should ask the user before importing. Declining will skip the import.
+- `ufw` on WSL: Firewall behavior can vary in WSL. We attempt best-effort configuration and surface errors; consider Windows Defender Firewall rules on the host as an alternative.
+- `.wslconfig` tuning: Changes should be done on the Windows host. We recommend a dry-run plan and executing changes via PowerShell with admin rights.
 
 ## Install and Build
 
@@ -79,13 +86,13 @@ Modules (YAML/TOML) definitions are supported at the library level and validated
 - Specification-driven, test-first development
 - Extensive use of seams/mocks to isolate tests from the system
 - Idempotency checks for all steps
-- Transactional rollback using `internal/tx` (LIFO undo stack)
+- Transactional rollback using `internal/tx` (LIFO undo stack) with aggregated rollback error reporting
 
 Quick start for contributors:
 
 ```bash
-# Install Go 1.24.6+ and make sure GOPATH/bin is on PATH
-make all           # tidy, lint, vet, test (auto-installs golangci-lint if missing)
+# Install Go 1.24.6 and make sure GOPATH/bin is on PATH
+make check-go && make all           # tidy, lint, vet, test (auto-installs golangci-lint if missing)
 make build         # build all packages
 ```
 
@@ -105,7 +112,7 @@ CI:
 
 - `.github/workflows/ci.yml` runs on push/PR:
   - Go 1.24.6
-  - Lint (`golangci-lint`), vet, `staticcheck`, tests
+  - Lint (`golangci-lint`), vet, `staticcheck`, tests (race, coverage), and coverage threshold
 - `.github/workflows/release.yml` builds on tag push `v*`:
   - Produces `linux/amd64` and `linux/arm64` binaries and creates a GitHub Release
 

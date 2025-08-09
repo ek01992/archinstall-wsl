@@ -51,10 +51,10 @@ jobs:
       - name: Forbid new global seams (grep)
         run: |
           set -e
-          # Flag common seam patterns: package-level var of function type named like runCommand/readFile, etc.
-          if git grep -nE 'var\s+\w+\s*=\s*func\(' -- ':!**/*_test.go' ':!internal/seams/*' ':!internal/runtime/*' || true; then
+          # Scan only Go source files to avoid matching examples in docs
+          if git grep -nE 'var\s+\w+\s*=\s*func\(' -- '*.go' ':!**/*_test.go' ':!internal/runtime/*' || true; then
             echo "Found potential global function seams. Please use Services and DI instead." >&2
-            git grep -nE 'var\s+\w+\s*=\s*func\(' -- ':!**/*_test.go' ':!internal/seams/*' ':!internal/runtime/*' || true
+            git grep -nE 'var\s+\w+\s*=\s*func\(' -- '*.go' ':!**/*_test.go' ':!internal/runtime/*' || true
             exit 1
           fi
 

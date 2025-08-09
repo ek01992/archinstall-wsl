@@ -8,7 +8,6 @@ import (
 )
 
 type cfs struct {
-	homes map[string]string
 	files map[string][]byte
 	dirs  map[string][]string
 }

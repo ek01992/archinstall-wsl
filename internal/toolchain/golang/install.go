@@ -3,7 +3,9 @@ package golang
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os/exec"
+	"regexp"
 	"time"
 )
 
@@ -41,13 +43,31 @@ var (
 
 type seamRunner struct{}
 
-func (seamRunner) Run(name string, args ...string) error            { return runCommand(name, args...) }
-func (seamRunner) Output(name string, args ...string) (string, error) { return runCommandCapture(name, args...) }
+func (seamRunner) Run(name string, args ...string) error { return runCommand(name, args...) }
+func (seamRunner) Output(name string, args ...string) (string, error) {
+	return runCommandCapture(name, args...)
+}
 
 type seamVS struct{}
 
 func (seamVS) LatestGo() (string, error) { return fetchLatestGoVersion() }
 
+var goVersionRegex = regexp.MustCompile(`go version go([0-9]+\.[0-9]+\.[0-9]+) `)
+
+func currentGoVersion() (string, error) {
+	out, err := runCommandCapture("go", "version")
+	if err != nil {
+		return "", err
+	}
+	m := goVersionRegex.FindStringSubmatch(out)
+	if len(m) < 2 {
+		return "", fmt.Errorf("unable to parse go version output: %q", out)
+	}
+	return m[1], nil
+}
+
 // installGoToolchain ensures the latest stable Go is installed via pacman and verifies by `go version`.
 // Idempotent: no-op when current version matches latest.
-func installGoToolchain() error { return NewService(seamRunner{}, seamVS{}).Install() }
+func installGoToolchain() error {
+	return NewService(seamRunner{}, seamVS{}).Install()
+}

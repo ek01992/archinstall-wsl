@@ -1,6 +1,9 @@
 package nerdfont
 
-import "testing"
+import (
+	"io/fs"
+	"testing"
+)
 
 type pf struct{}
 
@@ -12,28 +15,22 @@ type fsx struct {
 }
 
 func (f fsx) ReadDir(dir string) ([]string, error) {
-	if v, ok := f.names[dir]; ok {
-		return v, nil
-	}
-	return nil, assertErr
+	if v, ok := f.names[dir]; ok { return v, nil }
+	return nil, fs.ErrNotExist
 }
 func (f fsx) ReadFile(path string) ([]byte, error) {
-	if b, ok := f.files[path]; ok {
-		return b, nil
-	}
-	return nil, assertErr
+	if b, ok := f.files[path]; ok { return b, nil }
+	return nil, fs.ErrNotExist
 }
 
 type rf struct{}
 
-func (rf) PowerShell(args ...string) (string, error) { return "", assertErr }
-func (rf) WSLPath(args ...string) (string, error)    { return "", assertErr }
+func (rf) PowerShell(args ...string) (string, error) { return "", fs.ErrNotExist }
+func (rf) WSLPath(args ...string) (string, error)    { return "", fs.ErrNotExist }
 
 func TestService_Detect_Positive(t *testing.T) {
 	s := NewService(pf{}, fsx{names: map[string][]string{"/mnt/c/Windows/Fonts": {"JetBrainsMono Nerd Font.ttf"}}}, rf{})
-	if !s.Detect() {
-		t.Fatalf("expected true")
-	}
+	if !s.Detect() { t.Fatalf("expected true") }
 }
 
 func TestService_Detect_UsesWSLConfRoot(t *testing.T) {
@@ -42,7 +39,5 @@ func TestService_Detect_UsesWSLConfRoot(t *testing.T) {
 		files: map[string][]byte{"/etc/wsl.conf": []byte("[automount]\nroot = /altmnt/\n")},
 	}
 	s := NewService(pf{}, fs, rf{})
-	if !s.Detect() {
-		t.Fatalf("expected true when Nerd Font present via wsl.conf root")
-	}
+	if !s.Detect() { t.Fatalf("expected true when Nerd Font present via wsl.conf root") }
 }

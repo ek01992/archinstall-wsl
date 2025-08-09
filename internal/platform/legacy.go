@@ -1,31 +1,28 @@
 package platform
 
-import "time"
+import (
+	"os"
+	"time"
+)
 
-// Seam-backed adapters to preserve test overrides
+// OS-backed adapters to avoid recursion when redirecting seams
 
-type seamFS struct{}
+type osFS struct{}
 
-func (seamFS) ReadFile(path string) ([]byte, error) { return readFile(path) }
-func (seamFS) Stat(path string) (interface{}, error) {
-	if pathExists(path) {
-		return struct{}{}, nil
-	}
-	return nil, osErrNotExist
+func (osFS) ReadFile(path string) ([]byte, error)  { return os.ReadFile(path) }
+func (osFS) Stat(path string) (interface{}, error) { return os.Stat(path) }
+
+type osEnv struct{}
+
+func (osEnv) Getenv(k string) string { return os.Getenv(k) }
+
+var defaultService = NewService(osFS{}, osEnv{})
+
+// Redirect legacy seams to the DI service safely
+func init() {
+	getenv = func(k string) string { return defaultService.Getenv(k) }
+	pathExists = func(path string) bool { return defaultService.IsMounted(path) }
+	readFile = func(path string) ([]byte, error) { return defaultService.fs.ReadFile(path) }
 }
-
-// Minimal error type to avoid importing os; compare by nil/non-nil
-var osErrNotExist = errString("not-exist")
-
-type errString string
-
-func (e errString) Error() string { return string(e) }
-
-type seamEnv struct{}
-
-func (seamEnv) Getenv(k string) string { return getenv(k) }
-
-// Default DI-backed service available for new callers
-var defaultService = NewService(seamFS{}, seamEnv{})
 
 var _ = time.Second

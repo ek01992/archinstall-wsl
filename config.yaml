@@ -1,0 +1,7 @@
+Username: erik
+GitName: Erik Kowald
+GitEmail: ek01992@proton.me
+OhMyZshTheme: agnoster
+OhMyZshPlugins: [git, fzf]
+DotfilesRepo: "https://github.com/ekowald/dotfiles.git"
+NonInteractive: true

@@ -10,48 +10,60 @@ Entry point and UI:
 - `internal/app`: minimal app wrapper that starts the TUI
 - `internal/ui`: Bubble Tea model with a descriptive welcome view and an error handling UI (retry / skip / abort)
 
-Core capabilities (each implemented with test seams for idempotency and isolation):
+Core capabilities (each implemented as DI Services with small, testable interfaces):
 
-- `internal/user`: create user, set password, add to `wheel`, enable passwordless sudo; install Zsh; install and configure Oh My Zsh
-- `internal/git`: configure global `user.name` and `user.email` with verification
-- `internal/ssh`: import SSH keys from Windows host with correct permissions; idempotent copy
-- `internal/firewall`: configure `ufw` (default-deny inbound, allow Windows↔WSL subnet), idempotent
+- `internal/user`: Service for user creation, password, wheel group, sudoers; Zsh and Oh My Zsh installation; Tx variants
+- `internal/git`: Service for global `user.name` and `user.email` with verification; Tx variant
+- `internal/ssh`: Service for importing Windows SSH keys with correct permissions; idempotent copy
+- `internal/firewall`: Service to configure `ufw` (default-deny inbound, allow Windows↔WSL subnet); idempotent; Tx variant
 - `internal/toolchain`:
-  - `golang`: install/update Go toolchain; verify `go version`
-  - `python`: install `pyenv`, configure Python version, ensure `pipx`
-  - `nodejs`: install `nvm`, latest LTS Node.js as default
+  - `golang`: Service to install/update Go toolchain; verify `go version`
+  - `python`: Service to install `pyenv`, configure Python version, ensure `pipx`
+  - `nodejs`: Service to install `nvm`, latest LTS Node.js as default
+- `internal/nerdfont`: Service to detect presence of a Nerd Font on Windows host (via FS/Runner/Platform DI)
 - `internal/dotfiles`: clone and link dotfiles, or write a default `.zshrc`
 - `internal/modules`: YAML/TOML module loader with normalization and validation
 - `internal/config`: save/load persisted config (`~/.config/archwsl-tui-configurator/config.yaml`) with strict permissions
-- `internal/nerdfont`: detect presence of a Nerd Font on Windows host
+- `internal/platform`: Service for environment detection (`IsWSL`, `CanEditHostFiles`, `IsMounted`, `Getenv`)
 - `internal/pacman`: helpers to query local packages
 - `internal/tx`: generic transaction manager for LIFO rollback
 
 Cross-cutting concerns:
 
 - Idempotency checks before state changes
-- Test seams (function variables) to stub filesystem, OS commands, and network
+- Dependency Injection (DI) with interfaces (`Runner`, `FS`, `Env`, `Platform`, etc.) and adapters between packages
 - Transactional wrappers (Tx) provide compensating actions for rollback on failure
+- Logging via `internal/logx` at critical boundaries
+
+## DI Wiring (Provider)
+
+Production wiring is centralized in `internal/app/provider.go`:
+
+- Constructs `runtime` dependencies: `Runner`, `FS`, `Env`
+- Builds `platform.Service` with runtime FS/Env adapters
+- Adapts `runtime` abstractions into each service’s interfaces (e.g., nodejs `Runner` with `Shell`)
+- Exposes a `Provider` struct containing ready-to-use services (`User`, `SSH`, `Git`, `Firewall`, `NerdFont`, `GoToolchain`, `NodeToolchain`, `PythonToolchain`, `Platform`)
+
+This enables orchestration layers (e.g., UI flows) to depend on services, not on global seams.
 
 ## Component Relationships (Diagram Description)
 
 1. The CLI entrypoint initializes `internal/app`, which starts the Bubble Tea `internal/ui` model
-2. The UI orchestrates operations by calling functions in `internal/user`, `internal/git`, `internal/ssh`, `internal/firewall`, `internal/toolchain/*`, and `internal/dotfiles`
-3. Each critical function has a corresponding Tx wrapper in the same package (e.g., `createUserTx`, `configureGitTx`) that uses `internal/tx`
+2. The UI (or orchestrator) receives a `Provider` and calls service methods (instead of package-level functions)
+3. Each service depends on interfaces (FS/Runner/Env/Platform), injected via `Provider`
 4. Config is persisted and retrieved via `internal/config`
 5. Optional module definitions are parsed via `internal/modules` (YAML/TOML) for validated, normalized command lists
-6. Detection utilities (e.g., Nerd Font) provide environment awareness to adjust messaging
 
 Visually, imagine layers:
 
 - UI layer: `internal/ui` and `internal/app`
-- Orchestration layer: package-level functions invoked from UI
-- Capability layer: `internal/*` packages providing actions + Tx wrappers
-- Foundation layer: `internal/tx`, `internal/pacman`
+- Orchestration layer: constructs and uses `Provider`
+- Capability layer: `internal/*` DI services providing actions + Tx wrappers
+- Foundation layer: `internal/runtime`, `internal/tx`, `internal/pacman`
 
 ## Spec-to-Test Mapping
 
-The project is specification-driven. Each requirement is implemented alongside tests that prove correctness and idempotency. The table below summarizes the mapping.
+The project is specification-driven. Each requirement is implemented alongside tests that prove correctness, idempotency, and concurrency safety. The table below summarizes the mapping.
 
 | **Spec Ref** | **Requirement**                             | **Test Cases**                                                                                                  |
 | ------------ | ------------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
@@ -75,18 +87,8 @@ The project is specification-driven. Each requirement is implemented alongside t
 | E.1          | Config persistence                          | `config.yaml` created; rerun in non-interactive mode uses saved config                                          |
 | E.2          | Rollback mechanism                          | On step failure, rolls back changes; restores pre-step state                                                    |
 | E.3          | Failure handling UI                         | Presents retry/skip/abort options; logs error clearly                                                           |
+| F.1          | Concurrency safety                          | `Service_Concurrent_NoRaces` tests for user/git/ssh/firewall; `-race` CI job is clean                           |
 | IV.1         | Test-first                                  | Unit/integration tests exist for each spec item before implementation                                           |
-| IV.2         | CI/CD pipeline                              | Linting passes; static analysis passes; all tests pass on push                                                  |
+| IV.2         | CI/CD pipeline                              | Linting passes; static analysis passes; all tests pass; coverage threshold enforced                             |
 
-Note: Some items (e.g., `.wslconfig`, system essentials) may be planned milestones and are represented in the mapping for completeness.
-
-## Example Atomic Prompt (Milestone)
-
-Milestone 2 – Prompt 1
-
-- Implement and test `createUser(username, password string)`
-  - Requirements: idempotent, add user to `wheel`, enable passwordless sudo
-  - Tests: user creation, `usermod`/`gpasswd` fallback, sudoers content, idempotency (skip if exists)
-  - Transaction: if user did not exist before, rollback via `userdel -r`; restore sudoers file content
-
-This prompt is representative of how features are developed in atomic, testable slices.
+Note: Historical seam-based helpers were removed in favor of DI; new code must use services and injected dependencies.

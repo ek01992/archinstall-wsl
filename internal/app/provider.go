@@ -5,6 +5,7 @@ import (
 	"time"
 	stduser "os/user"
 
+	"archwsl-tui-configurator/internal/config"
 	"archwsl-tui-configurator/internal/firewall"
 	"archwsl-tui-configurator/internal/git"
 	"archwsl-tui-configurator/internal/nerdfont"
@@ -28,6 +29,7 @@ type Provider struct {
 	NodeToolchain   *nodejs.Service
 	PythonToolchain *python.Service
 	Platform        *platform.Service
+	Config          *config.Service
 }
 
 // Generic runner adapter for packages expecting Run/Output
@@ -124,6 +126,12 @@ func (userLookupAdapter) CurrentUsername() string {
 type userSudoValidator struct{}
 func (userSudoValidator) Validate(content string) error { return nil }
 
+// config FS adapter
+type configFSAdapter struct{ fs runtimepkg.FS }
+func (a configFSAdapter) ReadFile(p string) ([]byte, error)                 { return a.fs.ReadFile(p) }
+func (a configFSAdapter) WriteFile(p string, d []byte, perm fs.FileMode) error { return a.fs.WriteFile(p, d, perm) }
+func (a configFSAdapter) MkdirAll(p string, perm fs.FileMode) error         { return a.fs.MkdirAll(p, perm) }
+
 func NewProvider() *Provider {
 	// Prod runtime deps
 	r := runtimepkg.NewRunner(30 * time.Second)
@@ -143,6 +151,9 @@ func NewProvider() *Provider {
 	pySvc := python.NewService(runnerAdapter{r: r}, struct{ python.VersionSource }{})
 	userSvc := user.NewService(userCmdAdapter{r: r}, userFSAdapter{fs: fs}, userLookupAdapter{}, userSudoValidator{})
 
+	// config service
+	cfgSvc := config.NewService(configFSAdapter{fs: fs}, fs.UserHomeDir)
+
 	return &Provider{
 		User:            userSvc,
 		SSH:             sshSvc,
@@ -153,5 +164,6 @@ func NewProvider() *Provider {
 		NodeToolchain:   nodeSvc,
 		PythonToolchain: pySvc,
 		Platform:        platSvc,
+		Config:          cfgSvc,
 	}
 }

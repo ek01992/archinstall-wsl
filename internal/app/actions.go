@@ -55,13 +55,11 @@ func (a *appActions) Execute(id string) (string, error) {
 
 	case "load-config":
 		cfg := a.p.Config.Load("")
+		var b strings.Builder
+		b.WriteString("Load saved config (preview): ")
 		if cfg.IsZero() {
 			return "No saved config found.", nil
 		}
-
-		var b strings.Builder
-		b.WriteString("Load saved config (preview): ")
-
 		b.WriteString("\n")
 		if cfg.Username != "" {
 			b.WriteString("  Username: ")

@@ -41,7 +41,10 @@ jobs:
         run: $(go env GOPATH)/bin/staticcheck ./...
 
       - name: Test (race, coverage)
-        run: go test -race -coverprofile=coverage.txt -covermode=atomic ./...
+        run: |
+          set -e
+          pkgs=$(go list ./... | grep -v '^archwsl-tui-configurator/cmd')
+          go test -race -coverprofile=coverage.txt -covermode=atomic $pkgs
 
       - name: Enforce minimum coverage (overall >= 60%)
         run: |

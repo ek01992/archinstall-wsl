@@ -45,9 +45,7 @@ type Model struct {
 	lastErr    string
 }
 
-func New() tea.Model {
-	return Model{}
-}
+func New() tea.Model { return Model{} }
 
 func NewWithActions(acts Actions) tea.Model {
 	m := Model{acts: acts}
@@ -57,14 +55,11 @@ func NewWithActions(acts Actions) tea.Model {
 	return m
 }
 
-func (m Model) Init() tea.Cmd {
-	return nil
-}
+func (m Model) Init() tea.Cmd { return nil }
 
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
-		// Error flow handling
 		if m.errActive {
 			switch msg.String() {
 			case "r":
@@ -73,16 +68,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			case "s":
 				m.errChoice = choiceSkip
 				return m, tea.Quit
-			case "a":
-				m.errChoice = choiceAbort
-				return m, tea.Quit
-			case "ctrl+c", "q", "esc":
+			case "a", "ctrl+c", "q", "esc":
 				m.errChoice = choiceAbort
 				return m, tea.Quit
 			}
 		}
-
-		// Normal menu handling
 		switch msg.String() {
 		case "ctrl+c", "q", "esc":
 			return m, tea.Quit
@@ -107,7 +97,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 			}
 		}
-
 	case actionDoneMsg:
 		m.running = false
 		if msg.err != nil {
@@ -115,7 +104,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if m.lastErr == "" {
 				m.lastErr = "error"
 			}
-			m.lastOutput = "" // clear stale success text on error
+			m.lastOutput = "" // clear stale success on error
 		} else {
 			m.lastOutput = strings.TrimSpace(msg.output)
 		}
@@ -131,7 +120,7 @@ func (m Model) View() string {
 		b.WriteString("Error: ")
 		b.WriteString(strings.TrimSpace(m.errMsg))
 		b.WriteString("\n\n")
-		b.WriteString("[r]etry  [s]kip  [a]bort\n")
+		b.WriteString("[r]retry  [s]kip  [a]bort\n")
 		return b.String()
 	}
 
@@ -161,8 +150,6 @@ func (m Model) View() string {
 	} else {
 		b.WriteString("Provision an idempotent, repeatable Arch Linux environment on WSL2.\n")
 		b.WriteString("Safe to re-run anytime; changes only when needed.\n\n")
-		b.WriteString("Press q to quit.")
-		return b.String()
 	}
 
 	b.WriteString("Press q to quit.")

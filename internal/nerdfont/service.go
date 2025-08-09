@@ -45,6 +45,23 @@ func parseWSLAutomountRootFromFS(fs FS) string {
 	return strings.TrimSpace(root)
 }
 
+func parseDrvfsCMountFromFS(fs FS) string {
+	data, err := fs.ReadFile("/proc/mounts")
+	if err != nil || len(data) == 0 { return "" }
+	s := bufio.NewScanner(strings.NewReader(string(data)))
+	for s.Scan() {
+		line := strings.TrimSpace(s.Text())
+		if line == "" || strings.HasPrefix(line, "#") { continue }
+		fields := strings.Fields(line)
+		if len(fields) < 3 { continue }
+		device, mountpoint, fstype := fields[0], fields[1], fields[2]
+		if strings.Contains(device, "C:") && strings.Contains(strings.ToLower(fstype), "drvfs") {
+			return mountpoint
+		}
+	}
+	return ""
+}
+
 func (s *Service) Detect() bool {
 	if !s.p.IsWSL() { return false }
 	root := parseWSLAutomountRootFromFS(s.fs)
@@ -61,6 +78,15 @@ func (s *Service) Detect() bool {
 	}
 	if p, err := s.r.WSLPath("-u", "C:\\Windows\\Fonts"); err == nil {
 		if names, err2 := s.fs.ReadDir(strings.TrimSpace(p)); err2 == nil {
+			for _, name := range names {
+				lower := strings.ToLower(filepath.Base(name))
+				if strings.Contains(lower, "nerd font") || strings.Contains(lower, "nerdfont") { return true }
+			}
+		}
+	}
+	// Optional fallback via /proc/mounts to detect drvfs C: mount
+	if mp := parseDrvfsCMountFromFS(s.fs); strings.TrimSpace(mp) != "" {
+		if names, err := s.fs.ReadDir(filepath.Join(mp, "Windows/Fonts")); err == nil {
 			for _, name := range names {
 				lower := strings.ToLower(filepath.Base(name))
 				if strings.Contains(lower, "nerd font") || strings.Contains(lower, "nerdfont") { return true }

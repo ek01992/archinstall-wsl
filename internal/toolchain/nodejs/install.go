@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"os/exec"
-	"regexp"
 	"time"
 )
 
@@ -27,8 +26,6 @@ var (
 	fetchLatestNodeLTS = func() (string, error) { return "", errors.New("not implemented") }
 )
 
-var nodeVersionRegex = regexp.MustCompile(`^v\d+\.\d+\.\d+$`)
-
 type seamRunner struct{}
 func (seamRunner) Run(name string, args ...string) error            { return runCommand(name, args...) }
 func (seamRunner) Output(name string, args ...string) (string, error) { return runCommandCapture(name, args...) }
@@ -37,7 +34,6 @@ func (seamRunner) Shell(cmd string) (string, error)                 { return run
 type seamVS struct{}
 func (seamVS) LatestLTS() (string, error) { return fetchLatestNodeLTS() }
 
-func runShell(cmd string) error { return exec.Command("bash", "-lc", cmd).Run() }
 func runShellCapture(cmd string) (string, error) {
 	out, err := exec.Command("bash", "-lc", cmd).CombinedOutput()
 	return string(out), err

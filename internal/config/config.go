@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"strings"
 
+	"archwsl-tui-configurator/internal/logx"
+
 	"gopkg.in/yaml.v3"
 )
 
@@ -49,14 +51,15 @@ func saveConfig(cfg Config) error {
 	if err := writeFile(path, data, 0o600); err != nil {
 		return fmt.Errorf("write config: %w", err)
 	}
+	logx.Info("config: saved", "path", path)
 	return nil
 }
 
 // loadConfig reads configuration from the provided path; if empty/whitespace, uses default path.
 // On read error, returns zero-value Config.
 func loadConfig(path string) Config {
-	path = strings.TrimSpace(path)
-	if path == "" {
+	orig := strings.TrimSpace(path)
+	if orig == "" {
 		home, err := getUserHomeDir()
 		if err != nil || strings.TrimSpace(home) == "" {
 			return Config{}
@@ -71,6 +74,7 @@ func loadConfig(path string) Config {
 	if err := yaml.Unmarshal(data, &cfg); err != nil {
 		return Config{}
 	}
+	logx.Info("config: loaded", "path", path)
 	return cfg
 }
 

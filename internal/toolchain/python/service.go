@@ -30,6 +30,10 @@ func (s *Service) current() (string, error) {
 func (s *Service) Install() error {
 	latest, err := s.vs.LatestPython()
 	if err != nil || strings.TrimSpace(latest) == "" { return fmt.Errorf("fetch latest python: %w", err) }
+	// Ensure pyenv present
+	if _, err := s.r.Output("pyenv", "--version"); err != nil {
+		if err := s.r.Run("pacman", "-S", "--noconfirm", "pyenv"); err != nil { return fmt.Errorf("install pyenv: %w", err) }
+	}
 	cur, err := s.current()
 	if err != nil || cur != latest {
 		if err := s.r.Run("pyenv", "install", "-s", latest); err != nil { return fmt.Errorf("pyenv install %s: %w", latest, err) }

@@ -33,6 +33,13 @@ var (
 
 var pythonVersionRegex = regexp.MustCompile(`(?i)^Python\s+([0-9]+\.[0-9]+\.[0-9]+)`) // matches "Python 3.x.y"
 
+type seamRunner struct{}
+func (seamRunner) Run(name string, args ...string) error            { return runCommand(name, args...) }
+func (seamRunner) Output(name string, args ...string) (string, error) { return runCommandCapture(name, args...) }
+
+type seamVS struct{}
+func (seamVS) LatestPython() (string, error) { return fetchLatestPythonVersion() }
+
 func currentPythonVersion() (string, error) {
 	out, err := runCommandCapture("python", "--version")
 	if err != nil {
@@ -79,40 +86,4 @@ func isPipxInstalled() bool {
 }
 
 // installPythonToolchain installs/updates Python via pyenv and ensures pipx is present. Idempotent.
-func installPythonToolchain() error {
-	latest, err := fetchLatestPythonVersion()
-	if err != nil || strings.TrimSpace(latest) == "" {
-		return fmt.Errorf("fetch latest python: %w", err)
-	}
-
-	if err := ensurePyenvInstalled(); err != nil {
-		return err
-	}
-
-	cur, err := currentPythonVersion()
-	if err != nil || cur != latest {
-		if err := ensurePythonVersion(latest); err != nil {
-			return err
-		}
-		// Verify
-		cur2, err := currentPythonVersion()
-		if err != nil {
-			return fmt.Errorf("verify python after configure: %w", err)
-		}
-		if cur2 != latest {
-			return fmt.Errorf("verification failed: expected Python %s, got %s", latest, cur2)
-		}
-	}
-
-	if !isPipxInstalled() {
-		if err := runCommand("pacman", "-S", "--noconfirm", "pipx"); err != nil {
-			return fmt.Errorf("install pipx: %w", err)
-		}
-		// optional verify
-		if !isPipxInstalled() {
-			return fmt.Errorf("verification failed: pipx not available")
-		}
-	}
-
-	return nil
-}
+func installPythonToolchain() error { return NewService(seamRunner{}, seamVS{}).Install() }

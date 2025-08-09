@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"os/exec"
 	"regexp"
-	"strings"
 	"time"
 )
 
@@ -42,6 +41,13 @@ var (
 	}
 )
 
+type seamRunner struct{}
+func (seamRunner) Run(name string, args ...string) error            { return runCommand(name, args...) }
+func (seamRunner) Output(name string, args ...string) (string, error) { return runCommandCapture(name, args...) }
+
+type seamVS struct{}
+func (seamVS) LatestGo() (string, error) { return fetchLatestGoVersion() }
+
 var goVersionRegex = regexp.MustCompile(`go version go([0-9]+\.[0-9]+\.[0-9]+) `)
 
 func currentGoVersion() (string, error) {
@@ -59,37 +65,5 @@ func currentGoVersion() (string, error) {
 // installGoToolchain ensures the latest stable Go is installed via pacman and verifies by `go version`.
 // Idempotent: no-op when current version matches latest.
 func installGoToolchain() error {
-	latest, err := fetchLatestGoVersion()
-	if err != nil || strings.TrimSpace(latest) == "" {
-		return fmt.Errorf("fetch latest go version: %w", err)
-	}
-
-	cur, err := currentGoVersion()
-	if err != nil {
-		// go not installed: install
-		if err := runCommand("pacman", "-S", "--noconfirm", "go"); err != nil {
-			return fmt.Errorf("install go: %w", err)
-		}
-		cur, err = currentGoVersion()
-		if err != nil {
-			return fmt.Errorf("verify go after install: %w", err)
-		}
-	}
-
-	if cur == latest {
-		return nil
-	}
-
-	// Update to latest
-	if err := runCommand("pacman", "-Syu", "--noconfirm", "go"); err != nil {
-		return fmt.Errorf("update go: %w", err)
-	}
-	cur, err = currentGoVersion()
-	if err != nil {
-		return fmt.Errorf("verify go after update: %w", err)
-	}
-	if cur != latest {
-		return fmt.Errorf("verification failed: expected %s, got %s", latest, cur)
-	}
-	return nil
+	return NewService(seamRunner{}, seamVS{}).Install()
 }

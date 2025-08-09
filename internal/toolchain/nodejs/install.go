@@ -31,6 +31,18 @@ var (
 
 var nodeVersionRegex = regexp.MustCompile(`^v\d+\.\d+\.\d+$`)
 
+type seamRunner struct{}
+
+func (seamRunner) Run(name string, args ...string) error { return runCommand(name, args...) }
+func (seamRunner) Output(name string, args ...string) (string, error) {
+	return runCommandCapture(name, args...)
+}
+func (seamRunner) Shell(cmd string) (string, error) { return runShellCapture(cmd) }
+
+type seamVS struct{}
+
+func (seamVS) LatestLTS() (string, error) { return fetchLatestNodeLTS() }
+
 func isNvmInstalled() bool {
 	if _, err := runCommandCapture("nvm", "--version"); err == nil {
 		return true
@@ -69,9 +81,7 @@ func currentNodeVersion() (string, error) {
 	return s, nil
 }
 
-func runShell(cmd string) error {
-	return exec.Command("bash", "-lc", cmd).Run()
-}
+func runShell(cmd string) error { return exec.Command("bash", "-lc", cmd).Run() }
 
 func runShellCapture(cmd string) (string, error) {
 	out, err := exec.Command("bash", "-lc", cmd).CombinedOutput()
@@ -79,37 +89,4 @@ func runShellCapture(cmd string) (string, error) {
 }
 
 // installNodeToolchain installs nvm if missing, ensures latest LTS is installed and default-selected.
-func installNodeToolchain() error {
-	lts, err := fetchLatestNodeLTS()
-	if err != nil || strings.TrimSpace(lts) == "" {
-		return fmt.Errorf("fetch latest node LTS: %w", err)
-	}
-
-	if err := ensureNvmInstalled(); err != nil {
-		return err
-	}
-
-	cur, err := currentNodeVersion()
-	if err != nil || cur != lts {
-		// Try direct; if it fails, try shell-based invocation
-		if err := runCommand("nvm", "install", lts); err != nil {
-			if err2 := runShell("source /usr/share/nvm/init-nvm.sh 2>/dev/null || true; nvm install "+lts); err2 != nil {
-				return fmt.Errorf("nvm install %s: %w", lts, err)
-			}
-		}
-		if err := runCommand("nvm", "alias", "default", lts); err != nil {
-			if err2 := runShell("source /usr/share/nvm/init-nvm.sh 2>/dev/null || true; nvm alias default "+lts); err2 != nil {
-				return fmt.Errorf("nvm alias default %s: %w", lts, err)
-			}
-		}
-		nv, err := currentNodeVersion()
-		if err != nil {
-			return fmt.Errorf("verify node after install: %w", err)
-		}
-		if nv != lts {
-			return fmt.Errorf("verification failed: expected %s, got %s", lts, nv)
-		}
-	}
-
-	return nil
-}
+func installNodeToolchain() error { return NewService(seamRunner{}, seamVS{}).Install() }

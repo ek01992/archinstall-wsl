@@ -52,9 +52,9 @@ jobs:
         run: |
           set -e
           # Scan only Go source files to avoid matching examples in docs
-          if git grep -nE 'var\s+\w+\s*=\s*func\(' -- '*.go' ':!**/*_test.go' ':!internal/runtime/*' || true; then
+          if git grep -nE 'var\s+\w+\s*=\s*func\(' -- '*.go' ':!**/*_test.go' ':!internal/runtime/*' --quiet; then
             echo "Found potential global function seams. Please use Services and DI instead." >&2
-            git grep -nE 'var\s+\w+\s*=\s*func\(' -- '*.go' ':!**/*_test.go' ':!internal/runtime/*' || true
+            git grep -nE 'var\s+\w+\s*=\s*func\(' -- '*.go' ':!**/*_test.go' ':!internal/runtime/*'
             exit 1
           fi
 

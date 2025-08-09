@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"archwsl-tui-configurator/internal/logx"
 	"archwsl-tui-configurator/internal/tx"
 )
 
@@ -16,17 +17,22 @@ func (s *Service) CreateUser(username, password string) error {
 	if strings.ContainsAny(username, ":\n") || strings.Contains(password, "\n") {
 		return fmt.Errorf("invalid credentials")
 	}
+	logx.Info("create user: begin", "user", username)
 
 	if !s.id.UserExists(username) {
 		if err := s.cmd.Run("useradd", "-m", username); err != nil {
+			logx.Error("create user: useradd failed", "user", username, "err", err)
 			return fmt.Errorf("useradd failed: %w", err)
 		}
 	}
 	if err := s.cmd.RunWithStdin("chpasswd", fmt.Sprintf("%s:%s", username, password)); err != nil {
+		logx.Error("create user: chpasswd failed", "user", username, "err", err)
 		return fmt.Errorf("setting password failed: %w", err)
 	}
 	if err := s.cmd.Run("usermod", "-aG", "wheel", username); err != nil {
+		logx.Warn("create user: usermod failed, trying gpasswd", "user", username, "err", err)
 		if err2 := s.cmd.Run("gpasswd", "-a", username, "wheel"); err2 != nil {
+			logx.Error("create user: add to wheel failed", "user", username, "usermodErr", err, "gpasswdErr", err2)
 			return fmt.Errorf("adding to wheel failed (usermod: %v, gpasswd: %w)", err, err2)
 		}
 	}
@@ -39,9 +45,11 @@ func (s *Service) CreateUser(username, password string) error {
 	current, _ := s.fs.ReadFile(path)
 	if string(current) != desired {
 		if err := s.sudo.Validate(desired); err != nil {
+			logx.Error("create user: sudoers validate failed", "user", username, "err", err)
 			return fmt.Errorf("sudoers validation failed: %w", err)
 		}
 		if err := s.fs.WriteFile(path, []byte(desired), 0o440); err != nil {
+			logx.Error("create user: write sudoers failed", "user", username, "err", err)
 			return fmt.Errorf("writing sudoers file failed: %w", err)
 		}
 	}

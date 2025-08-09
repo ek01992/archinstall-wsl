@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"strings"
 	"time"
+
+	"archwsl-tui-configurator/internal/logx"
 )
 
 type Runner interface {
@@ -18,13 +20,16 @@ type Service struct{ r Runner }
 func NewService(r Runner) *Service { return &Service{r: r} }
 
 func (s *Service) Configure() error {
+	logx.Info("ufw: ensure defaults and rules")
 	status, err := s.r.Output("ufw", "status", "verbose")
 	if err != nil {
 		if s2, err2 := s.r.Output("ufw", "status"); err2 == nil {
 			status = s2
 		} else {
+			logx.Error("ufw: status failed", "err", err)
 			return fmt.Errorf("ufw status failed: %w", err)
 		}
+		logx.Warn("ufw: verbose not available; falling back")
 	}
 	isActive := strings.Contains(status, "Status: active")
 	hasDenyIncoming := strings.Contains(status, "deny (incoming)")
@@ -32,28 +37,31 @@ func (s *Service) Configure() error {
 	hasSubnetRule := strings.Contains(status, "172.16.0.0/12")
 	if !hasDenyIncoming {
 		if err := s.r.Run("ufw", "default", "deny", "incoming"); err != nil {
+			logx.Error("ufw: set default deny incoming failed", "err", err)
 			return fmt.Errorf("set default deny incoming: %w", err)
 		}
 	}
 	if !hasAllowOutgoing {
 		if err := s.r.Run("ufw", "default", "allow", "outgoing"); err != nil {
+			logx.Error("ufw: set default allow outgoing failed", "err", err)
 			return fmt.Errorf("set default allow outgoing: %w", err)
 		}
 	}
 	if !hasSubnetRule {
 		if err := s.r.Run("ufw", "allow", "from", "172.16.0.0/12"); err != nil {
+			logx.Error("ufw: allow subnet failed", "err", err)
 			return fmt.Errorf("allow subnet: %w", err)
 		}
 	}
 	if !isActive {
 		if err := s.r.Run("ufw", "--force", "enable"); err != nil {
-			// mimic original fallback
-			_ = context.TODO() // ensure import usage
+			_ = context.TODO()
 			if !errors.Is(err, context.DeadlineExceeded) {
 				if err2 := s.r.Run("ufw", "enable"); err2 == nil {
 					return nil
 				}
 			}
+			logx.Error("ufw: enable failed", "err", err)
 			return fmt.Errorf("enable ufw: %w", err)
 		}
 	}
@@ -75,6 +83,6 @@ func (s *Service) ConfigureTx() error {
 		}
 		return err
 	}
-	_ = time.Second // keep time import
+	_ = time.Second
 	return nil
 }

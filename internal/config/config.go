@@ -78,5 +78,16 @@ func loadConfig(path string) Config {
 	return cfg
 }
 
+// IsZero checks if the config is empty/default
+func (c Config) IsZero() bool {
+	return c.Username == "" &&
+		c.GitName == "" &&
+		c.GitEmail == "" &&
+		c.OhMyZshTheme == "" &&
+		len(c.OhMyZshPlugins) == 0 &&
+		c.DotfilesRepo == "" &&
+		!c.NonInteractive
+}
+
 // osUserHomeDirImpl is separated for testing seams.
 func osUserHomeDirImpl() (string, error) { return os.UserHomeDir() }

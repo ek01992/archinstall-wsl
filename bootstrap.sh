@@ -33,7 +33,7 @@ OPTIONAL_DOTFILES_HELPERS=( neovim direnv starship )
 OPTIMIZE_MIRRORS="${OPTIMIZE_MIRRORS:-true}"
 
 # --------------------------------------------
-# Helpers
+# Logging and small helpers
 # --------------------------------------------
 TS() { date +'%F %T'; }
 log() { printf "[%s] %s %s\n" "$(TS)" "${1}" "${2}"; }
@@ -129,23 +129,36 @@ ensure_user_rc_files() {
 }
 
 # --------------------------------------------
-# System configuration and packages
+# Locale configuration (decomposed)
 # --------------------------------------------
-ensure_locale() {
-  log "*" "Configuring locale (en_US.UTF-8)"
+configure_locale_gen() {
+  log "*" "Configuring /etc/locale.gen for en_US.UTF-8"
   sudo sed -i 's/^# *en_US.UTF-8/en_US.UTF-8/' /etc/locale.gen
+}
+
+generate_locale() {
+  log "*" "Generating locales"
   sudo locale-gen
+}
+
+persist_locale_env() {
+  log "*" "Persisting locale environment"
   echo 'LANG=en_US.UTF-8' | sudo tee /etc/locale.conf >/dev/null
   append_once 'LANG=en_US.UTF-8' /etc/environment
   export LANG=en_US.UTF-8
   append_once 'export LANG=en_US.UTF-8' /root/.bashrc
 }
 
-optimize_mirrors_if_enabled() {
-  if [ "${OPTIMIZE_MIRRORS}" != "true" ]; then
-    return 0
-  fi
+ensure_locale() {
+  configure_locale_gen
+  generate_locale
+  persist_locale_env
+}
 
+# --------------------------------------------
+# Pacman configuration and update
+# --------------------------------------------
+ensure_pacman_parallel_downloads() {
   if ! grep -q '^\[options\]' /etc/pacman.conf; then
     printf "\n[options]\n" | sudo tee -a /etc/pacman.conf >/dev/null
   fi
@@ -160,11 +173,15 @@ optimize_mirrors_if_enabled() {
     }
   ' /etc/pacman.conf | sudo tee /etc/pacman.conf.tmp >/dev/null
   sudo mv /etc/pacman.conf.tmp /etc/pacman.conf
+}
 
-  log "*" "Installing reflector to optimize mirrors (best-effort)"
+install_reflector_best_effort() {
+  log "*" "Installing reflector (best-effort)"
   sudo pacman -Sy --noconfirm --noprogressbar || true
   sudo pacman -S --needed --noconfirm --noprogressbar rsync reflector || true
+}
 
+update_mirrorlist_with_reflector() {
   if command -v reflector >/dev/null 2>&1; then
     if ! reflector --latest 20 --sort rate --save /etc/pacman.d/mirrorlist; then
       log "i" "reflector failed; keeping existing mirrorlist"
@@ -174,8 +191,17 @@ optimize_mirrors_if_enabled() {
   fi
 }
 
-pacman_quiet_update() {
-  log "*" "Refreshing keyring and updating base system"
+optimize_mirrors_if_enabled() {
+  if [ "${OPTIMIZE_MIRRORS}" != "true" ]; then
+    return 0
+  fi
+  ensure_pacman_parallel_downloads
+  install_reflector_best_effort
+  update_mirrorlist_with_reflector
+}
+
+refresh_pacman_keyring() {
+  log "*" "Refreshing keyring"
   if command -v timedatectl >/dev/null 2>&1; then
     timedatectl status >/dev/null 2>&1 || true
   fi
@@ -184,8 +210,17 @@ pacman_quiet_update() {
   sudo pacman-key --populate archlinux || true
   retry 3 3 sudo pacman -Sy --noconfirm --noprogressbar archlinux-keyring || true
   sudo pacman-key --populate archlinux || true
+}
+
+pacman_system_update() {
   optimize_mirrors_if_enabled
   retry 3 5 sudo pacman -Syyu --noconfirm --noprogressbar
+}
+
+pacman_quiet_update() {
+  log "*" "Refreshing keyring and updating base system"
+  refresh_pacman_keyring
+  pacman_system_update
 }
 
 install_packages() {
@@ -198,6 +233,9 @@ install_packages() {
   sudo pacman -S --needed --noconfirm --noprogressbar "${OPTIONAL_DOTFILES_HELPERS[@]}" || true
 }
 
+# --------------------------------------------
+# User and privileges
+# --------------------------------------------
 ensure_user_and_sudo() {
   local user="$1"
   if ! id -u "$user" >/dev/null 2>&1; then
@@ -221,6 +259,9 @@ ensure_subids() {
   fi
 }
 
+# --------------------------------------------
+# WSL configuration
+# --------------------------------------------
 configure_wsl() {
   log "*" "Writing /etc/wsl.conf (systemd=true, resolv.conf mode: ${DNS_MODE}, default user)"
   local gen="true"
@@ -242,30 +283,39 @@ generateResolvConf=${gen}
 EOF
 }
 
-configure_dns_static() {
-  log "*" "Configuring static resolv.conf"
+# --------------------------------------------
+# DNS configuration
+# --------------------------------------------
+ensure_resolv_unlocked() {
   if command -v chattr >/dev/null 2>&1; then
     sudo chattr -i /etc/resolv.conf 2>/dev/null || true
   fi
   sudo rm -f /etc/resolv.conf || true
+}
+
+write_static_resolv_conf() {
   {
     for ns in "${NAMESERVERS[@]}"; do
       printf 'nameserver %s\n' "$ns"
     done
     echo "options edns0"
   } | sudo tee /etc/resolv.conf >/dev/null
+}
+
+lock_resolv_if_enabled() {
   if [ "${CHATTR_IMMUTABLE_RESOLV}" = "true" ] && command -v chattr >/dev/null 2>&1; then
     sudo chattr +i /etc/resolv.conf || true
   fi
 }
 
-configure_dns_resolved() {
-  log "*" "Configuring systemd-resolved support"
-  if command -v chattr >/dev/null 2>&1; then
-    sudo chattr -i /etc/resolv.conf 2>/dev/null || true
-  fi
-  sudo rm -f /etc/resolv.conf || true
+configure_dns_static() {
+  log "*" "Configuring static resolv.conf"
+  ensure_resolv_unlocked
+  write_static_resolv_conf
+  lock_resolv_if_enabled
+}
 
+create_resolved_link_service() {
   cat <<'EOF' | sudo tee /etc/systemd/system/wsl-resolved-link.service >/dev/null
 [Unit]
 Description=WSL: Link /etc/resolv.conf to systemd-resolved stub
@@ -283,12 +333,15 @@ EOF
   sudo systemctl daemon-reload || true
 }
 
+configure_dns_resolved() {
+  log "*" "Configuring systemd-resolved support"
+  ensure_resolv_unlocked
+  create_resolved_link_service
+}
+
 configure_dns_wsl() {
   log "*" "Using WSL-managed resolv.conf"
-  if command -v chattr >/dev/null 2>&1; then
-    sudo chattr -i /etc/resolv.conf 2>/dev/null || true
-  fi
-  sudo rm -f /etc/resolv.conf || true
+  ensure_resolv_unlocked
 }
 
 configure_dns() {
@@ -301,22 +354,14 @@ configure_dns() {
 }
 
 # --------------------------------------------
-# User toolchains (split by tool) and dotfiles
+# User toolchains and dotfiles
 # --------------------------------------------
-
-#######################################
-# Install and initialize pyenv for a user
-# Globals: append_once, ensure_user_rc_files, get_user_home
-# Args: $1 - user name
-# Returns: None
-#######################################
 install_pyenv_for_user() {
   local user="$1"
   local home_dir
   home_dir="$(get_user_home "$user")" || fail "Could not determine home for user '$user'"
 
   log "*" "Setting up pyenv for ${user}"
-
   ensure_user_rc_files "$user"
 
   if [ ! -d "${home_dir}/.pyenv" ]; then
@@ -335,19 +380,12 @@ install_pyenv_for_user() {
   sudo chown -R "$user:$user" "${home_dir}/.pyenv" 2>/dev/null || true
 }
 
-#######################################
-# Install and initialize nvm for a user
-# Globals: append_once, ensure_user_rc_files, get_user_home
-# Args: $1 - user name
-# Returns: None
-#######################################
 install_nvm_for_user() {
   local user="$1"
   local home_dir
   home_dir="$(get_user_home "$user")" || fail "Could not determine home for user '$user'"
 
   log "*" "Setting up nvm for ${user}"
-
   ensure_user_rc_files "$user"
 
   if [ ! -d "${home_dir}/.nvm" ]; then
@@ -364,19 +402,12 @@ install_nvm_for_user() {
   sudo chown -R "$user:$user" "${home_dir}/.nvm" 2>/dev/null || true
 }
 
-#######################################
-# Install and initialize rustup for a user
-# Globals: append_once, ensure_user_rc_files, get_user_home
-# Args: $1 - user name
-# Returns: None
-#######################################
 install_rustup_for_user() {
   local user="$1"
   local home_dir
   home_dir="$(get_user_home "$user")" || fail "Could not determine home for user '$user'"
 
   log "*" "Setting up rustup for ${user}"
-
   ensure_user_rc_files "$user"
 
   if [ ! -x "${home_dir}/.cargo/bin/rustc" ]; then
@@ -388,14 +419,10 @@ install_rustup_for_user() {
   sudo chown -R "$user:$user" "${home_dir}/.cargo" 2>/dev/null || true
 }
 
-link_dotfiles_for_user() {
-  local user="$1"
-  local home_dir
-  home_dir="$(get_user_home "$user")" || fail "Could not determine home for user '$user'"
-  local dotroot=""
-
+detect_dotfiles_root() {
+  local root=""
   if [ -n "$REPO_ROOT_MNT" ] && [ -d "$REPO_ROOT_MNT/dotfiles" ]; then
-    dotroot="${REPO_ROOT_MNT}/dotfiles"
+    root="${REPO_ROOT_MNT}/dotfiles"
   else
     if command -v powershell.exe >/dev/null 2>&1; then
       local win_cwd
@@ -403,10 +430,20 @@ link_dotfiles_for_user() {
       if [ -n "$win_cwd" ]; then
         local repo_root
         repo_root="$(wslpath -u "$win_cwd")"
-        [ -d "${repo_root}/dotfiles" ] && dotroot="${repo_root}/dotfiles"
+        [ -d "${repo_root}/dotfiles" ] && root="${repo_root}/dotfiles"
       fi
     fi
   fi
+  printf '%s' "$root"
+}
+
+link_dotfiles_for_user() {
+  local user="$1"
+  local home_dir
+  home_dir="$(get_user_home "$user")" || fail "Could not determine home for user '$user'"
+
+  local dotroot
+  dotroot="$(detect_dotfiles_root)"
 
   if [ -n "$dotroot" ] && [ -d "$dotroot" ]; then
     log "*" "Linking dotfiles for ${user} from ${dotroot}"
@@ -432,30 +469,40 @@ is_systemd_active() {
   [ "$pid1" = "systemd" ]
 }
 
-enable_services() {
-  log "*" "Enabling services (requires systemd)"
+ensure_systemd_active_or_fail() {
   if ! is_systemd_active; then
     fail "systemd is not active (PID 1 != systemd). Restart WSL with systemd=true and rerun phase2."
   fi
+}
 
+configure_sshd_loopback() {
   echo 'ListenAddress 127.0.0.1' | sudo tee /etc/ssh/sshd_config.d/loopback.conf >/dev/null
-  sudo systemctl daemon-reload || true
+}
 
+enable_resolved_services_if_needed() {
   if [ "${DNS_MODE}" = "resolved" ]; then
     sudo systemctl enable --now systemd-resolved || true
     sudo systemctl enable --now wsl-resolved-link.service || true
   fi
+}
 
+enable_core_services() {
+  sudo systemctl daemon-reload || true
+  enable_resolved_services_if_needed
   sudo systemctl enable --now podman.socket
   sudo systemctl enable --now sshd
 }
 
-finalize_user_toolchains() {
+enable_services() {
+  log "*" "Enabling services (requires systemd)"
+  ensure_systemd_active_or_fail
+  configure_sshd_loopback
+  enable_core_services
+}
+
+finalize_pyenv_python() {
   local user="$1"
   local PY_VER="${PY_VER:-3.12.5}"
-
-  log "*" "Finalizing toolchains for ${user} (Node LTS, Python ${PY_VER}, pip upgrade, rust components)"
-
   sudo -u "$user" bash -lc "
     set -e
     [ -f \"\$HOME/.profile\" ] && . \"\$HOME/.profile\"
@@ -464,7 +511,6 @@ finalize_user_toolchains() {
     [ -d \"\$PYENV_ROOT/bin\" ] && export PATH=\"\$PYENV_ROOT/bin:\$PATH\"
     if command -v pyenv >/dev/null 2>&1; then
       eval \"\$(pyenv init -)\"
-      # If version exists but missing critical modules (ssl/sqlite3/tkinter), rebuild it
       if pyenv versions --bare | grep -qx \"${PY_VER}\"; then
         if ! PYENV_VERSION=\"${PY_VER}\" python -c \"import ssl, sqlite3, tkinter\" >/dev/null 2>&1; then
           echo \"Detected incomplete Python ${PY_VER}; rebuilding with required libs...\"
@@ -478,7 +524,10 @@ finalize_user_toolchains() {
       echo 'Warning: pyenv not found; skipping pyenv-managed Python'
     fi
   "
+}
 
+finalize_rust() {
+  local user="$1"
   sudo -u "$user" bash -lc '
     set -e
     [ -f "$HOME/.profile" ] && . "$HOME/.profile"
@@ -488,7 +537,10 @@ finalize_user_toolchains() {
     rustup default stable || true
     rustup component add rustfmt clippy || true
   '
+}
 
+finalize_podman() {
+  local user="$1"
   sudo -u "$user" bash -lc '
     set -e
     if command -v podman >/dev/null 2>&1; then
@@ -496,7 +548,24 @@ finalize_user_toolchains() {
       timeout 20s podman run --rm --network slirp4netns --dns 1.1.1.1 quay.io/podman/hello >/dev/null 2>&1 || true
     fi
   '
+}
 
+finalize_node_lts_if_nvm_present() {
+  local user="$1"
+  sudo -u "$user" bash -lc '
+    set -e
+    [ -f "$HOME/.profile" ] && . "$HOME/.profile"
+    [ -f "$HOME/.bashrc" ] && . "$HOME/.bashrc"
+    export NVM_DIR="$HOME/.nvm"
+    [ -s "$NVM_DIR/nvm.sh" ] || exit 0
+    . "$NVM_DIR/nvm.sh"
+    nvm install --lts >/dev/null 2>&1 || true
+    nvm use --lts >/dev/null 2>&1 || true
+  '
+}
+
+print_versions_summary() {
+  local user="$1"
   sudo -u "$user" bash -lc '
     set -e
     [ -f "$HOME/.profile" ] && . "$HOME/.profile"
@@ -510,6 +579,16 @@ finalize_user_toolchains() {
     command -v rustc >/dev/null 2>&1 && echo "  rustc: $(rustc -V 2>/dev/null)" || true
     command -v podman >/dev/null 2>&1 && echo "  podman: $(podman --version 2>/dev/null)" || true
   '
+}
+
+finalize_user_toolchains() {
+  local user="$1"
+  log "*" "Finalizing toolchains for ${user}"
+  finalize_pyenv_python "$user"
+  finalize_rust "$user"
+  finalize_podman "$user"
+  finalize_node_lts_if_nvm_present "$user"
+  print_versions_summary "$user"
 }
 
 cleanup_for_snapshot() {
@@ -535,7 +614,6 @@ phase1_main() {
   configure_wsl
   configure_dns
 
-  # Split toolchain installers
   install_pyenv_for_user "$DEFAULT_USER"
   install_nvm_for_user "$DEFAULT_USER"
   install_rustup_for_user "$DEFAULT_USER"

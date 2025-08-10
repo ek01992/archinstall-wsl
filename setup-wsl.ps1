@@ -1,13 +1,20 @@
 # setup-wsl.ps1
 # Requires Windows 10 2004+ or Windows 11 with WSL2 enabled
 
-[CmdletBinding(SupportsShouldProcess=$true, ConfirmImpact='Medium')]
+[CmdletBinding(SupportsShouldProcess = $true, ConfirmImpact = 'Medium')]
 param(
     [switch]$Force,
+
+    [ValidatePattern('^[A-Za-z0-9._-]+$')]
     [string]$DistroName = 'archlinux',
+
+    [ValidatePattern('^[A-Za-z_][A-Za-z0-9_-]*$')]
     [string]$DefaultUser = 'erik',
+
     [ValidateSet('static','resolved','wsl')]
     [string]$DnsMode = 'static',
+
+    [ValidateRange(0, 256)]
     [int]$SwapGB = 4
 )
 
@@ -17,7 +24,7 @@ $ErrorActionPreference = 'Stop'
 # -------------------------------
 # Configuration
 # -------------------------------
-$repoRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
+$repoRoot     = Split-Path -Parent $MyInvocation.MyCommand.Path
 $bootstrapLocal = Join-Path $repoRoot "bootstrap.sh"
 $snapshotFile = Join-Path $env:USERPROFILE "arch.tar.bak"
 $wslConfigPath = Join-Path $env:USERPROFILE ".wslconfig"
@@ -61,13 +68,16 @@ function Get-WslDistributions {
 }
 
 function Test-WslDistributionExists {
-  param([string]$Name)
+  param([Parameter(Mandatory)][string]$Name)
   $d = Get-WslDistributions
   return ($d -contains $Name)
 }
 
 function Wait-WslDistribution {
-  param([string]$Name, [int]$TimeoutSec = 60)
+  param(
+    [Parameter(Mandatory)][string]$Name,
+    [int]$TimeoutSec = 60
+  )
   $sw = [Diagnostics.Stopwatch]::StartNew()
   while ($sw.Elapsed.TotalSeconds -lt $TimeoutSec) {
     if (Test-WslDistributionExists -Name $Name) { return $true }
@@ -76,28 +86,42 @@ function Wait-WslDistribution {
   return $false
 }
 
-function Set-WslConfigFile {
-  $content = @"
+function Get-WslConfigContent {
+  @"
 [wsl2]
 memory=$WSLMemory
 processors=$WSLCPUs
 swap=$(${SwapGB})GB
 localhostForwarding=true
 "@
-  if (Test-Path $wslConfigPath) {
-    $existing = Get-Content -Raw $wslConfigPath
-    if ($existing -ne $content) {
-      $backup = "$wslConfigPath.bak"
-      if ($PSCmdlet.ShouldProcess(".wslconfig", "Backup to $backup")) {
-        Copy-Item $wslConfigPath $backup -Force
-        Write-Status "[i] Backed up existing .wslconfig to $backup" -Color DarkGray
-      }
+}
+
+function Set-FileContentIfChanged {
+  param(
+    [Parameter(Mandatory)][string]$Path,
+    [Parameter(Mandatory)][string]$NewContent,
+    [string]$BackupSuffix = '.bak',
+    [string]$Encoding = 'ASCII'
+  )
+  $shouldWrite = $true
+  if (Test-Path $Path) {
+    $existing = Get-Content -Raw -Encoding Byte -Path $Path
+    $newBytes = [System.Text.Encoding]::GetEncoding($Encoding).GetBytes($NewContent)
+    $shouldWrite = -not ($existing.Length -eq $newBytes.Length -and ($existing -ceq $newBytes))
+    if ($shouldWrite -and $PSCmdlet.ShouldProcess($Path, "Backup to ${Path}${BackupSuffix}")) {
+      Copy-Item $Path "${Path}${BackupSuffix}" -Force
+      Write-Status "[i] Backed up existing file to ${Path}${BackupSuffix}" -Color DarkGray
     }
   }
-  if ($PSCmdlet.ShouldProcess(".wslconfig", "Write memory=$WSLMemory, processors=$WSLCPUs, swap=${SwapGB}GB")) {
-    $content | Set-Content -NoNewline -Encoding ASCII $wslConfigPath
-    Write-Status "[*] Wrote $wslConfigPath (memory=$WSLMemory, processors=$WSLCPUs, swap=${SwapGB}GB)" -Color Cyan
+  if ($shouldWrite -and $PSCmdlet.ShouldProcess($Path, "Write updated content")) {
+    $NewContent | Set-Content -Encoding $Encoding -NoNewline -Path $Path
+    Write-Status "[*] Wrote $Path" -Color Cyan
   }
+}
+
+function Set-WslConfigFile {
+  $content = Get-WslConfigContent
+  Set-FileContentIfChanged -Path $wslConfigPath -NewContent $content -Encoding 'ASCII'
 }
 
 function ConvertTo-WslPath {
@@ -110,21 +134,25 @@ function ConvertTo-WslPath {
   return "/mnt/$drive$rest"
 }
 
-function Prepare-BootstrapScript {
-  # Normalize LF endings to avoid /usr/bin/env bash\r errors
-  $tempBootstrap = Join-Path $env:TEMP "bootstrap-arch-wsl.sh"
-  $text = Get-Content -Raw -Encoding UTF8 $bootstrapLocal
+function Convert-ToLF {
+  param([Parameter(Mandatory)][string]$Path)
+  $text = Get-Content -Raw -Encoding UTF8 $Path
   $text = $text -replace "`r`n","`n"
   $text = $text -replace "`r","`n"
-  Set-Content -Path $tempBootstrap -Value $text -NoNewline -Encoding utf8NoBOM
-  Write-Status "[*] Prepared $tempBootstrap (LF line endings)." -Color Cyan
-  return $tempBootstrap
+  $temp = Join-Path $env:TEMP ([IO.Path]::GetFileNameWithoutExtension($Path) + "-lf" + [IO.Path]::GetExtension($Path))
+  Set-Content -Path $temp -Value $text -NoNewline -Encoding utf8NoBOM
+  Write-Status "[*] Prepared $temp (LF line endings)." -Color Cyan
+  return $temp
+}
+
+function Prepare-BootstrapScript {
+  return (Convert-ToLF -Path $bootstrapLocal)
 }
 
 function Invoke-WslChecked {
   param(
-    [string[]]$ArgList,
-    [string]$ErrorContext
+    [Parameter(Mandatory)][string[]]$ArgList,
+    [Parameter(Mandatory)][string]$ErrorContext
   )
   & wsl.exe @ArgList
   if ($LASTEXITCODE -ne 0) {
@@ -132,31 +160,58 @@ function Invoke-WslChecked {
   }
 }
 
-function Install-WslDistribution {
-  if (Test-WslDistributionExists -Name $DistroName) {
-    if (-not $Force) {
-      $resp = Read-Host "Distro '$DistroName' exists. Unregister it and reinstall? (y/N)"
-      if ($resp -notin @("y","Y")) {
-        throw "Aborted by user."
-      }
-    }
-    if ($PSCmdlet.ShouldProcess("WSL distro '$DistroName'", "Unregister")) {
-      Write-Status "[*] Unregistering '$DistroName'..." -Color Yellow
-      & wsl.exe --terminate $DistroName | Out-Null
-      & wsl.exe --unregister $DistroName
-    }
+function Remove-WslDistribution {
+  param([Parameter(Mandatory)][string]$Name)
+  if ($PSCmdlet.ShouldProcess("WSL distro '$Name'", "Unregister")) {
+    Write-Status "[*] Unregistering '$Name'..." -Color Yellow
+    & wsl.exe --terminate $Name | Out-Null
+    & wsl.exe --unregister $Name
   }
-  if ($PSCmdlet.ShouldProcess("WSL distro '$DistroName'", "Install --no-launch")) {
-    Write-Status "[*] Installing '$DistroName'..." -Color Cyan
+}
+
+function Install-WslDistributionNoLaunch {
+  param([Parameter(Mandatory)][string]$Name)
+  if ($PSCmdlet.ShouldProcess("WSL distro '$Name'", "Install --no-launch")) {
+    Write-Status "[*] Installing '$Name'..." -Color Cyan
     try {
-      & wsl.exe --install --no-launch -d $DistroName
+      & wsl.exe --install --no-launch -d $Name
     } catch {
       Write-Warning "wsl.exe --install failed. If the Microsoft Store Arch is unavailable, consider importing an Arch rootfs manually."
       throw
     }
-    if (-not (Wait-WslDistribution -Name $DistroName -TimeoutSec 120)) {
-      throw "Distro '$DistroName' did not appear after install."
+    if (-not (Wait-WslDistribution -Name $Name -TimeoutSec 120)) {
+      throw "Distro '$Name' did not appear after install."
     }
+  }
+}
+
+function Ensure-WslDistributionPresent {
+  param(
+    [Parameter(Mandatory)][string]$Name,
+    [switch]$ForceReinstall
+  )
+  if (Test-WslDistributionExists -Name $Name) {
+    if (-not $ForceReinstall) {
+      $resp = Read-Host "Distro '$Name' exists. Unregister it and reinstall? (y/N)"
+      if ($resp -notin @("y","Y")) {
+        return
+      }
+    }
+    Remove-WslDistribution -Name $Name
+  }
+  Install-WslDistributionNoLaunch -Name $Name
+}
+
+function New-PhaseCommand {
+  param(
+    [Parameter(Mandatory)][ValidateSet('phase1','phase2')] [string]$Phase,
+    [Parameter(Mandatory)][string]$MntBootstrap,
+    [Parameter(Mandatory)][string]$MntRepoRoot
+  )
+  if ($Phase -eq 'phase1') {
+    return "chmod +x '$MntBootstrap' && DEFAULT_USER='$DefaultUser' WSL_MEMORY='$WSLMemory' WSL_CPUS='$WSLCPUs' REPO_ROOT_MNT='$MntRepoRoot' DNS_MODE='$DnsMode' '$MntBootstrap' phase1"
+  } else {
+    return "DEFAULT_USER='$DefaultUser' DNS_MODE='$DnsMode' '$MntBootstrap' phase2"
   }
 }
 
@@ -166,16 +221,16 @@ function Invoke-WslPhase {
     [Parameter(Mandatory)][string]$MntBootstrap,
     [Parameter(Mandatory)][string]$MntRepoRoot
   )
-  if ($Phase -eq 'phase1') {
-    $cmd = "chmod +x '$MntBootstrap' && DEFAULT_USER='$DefaultUser' WSL_MEMORY='$WSLMemory' WSL_CPUS='$WSLCPUs' REPO_ROOT_MNT='$MntRepoRoot' DNS_MODE='$DnsMode' '$MntBootstrap' phase1"
-    if ($PSCmdlet.ShouldProcess("WSL '$DistroName'", "Run Phase 1 as root")) {
-      Invoke-WslChecked -ArgList @('-d', $DistroName, '-u', 'root', '--', 'bash', '-lc', $cmd) -ErrorContext "Phase 1"
-    }
-  } else {
-    $cmd = "DEFAULT_USER='$DefaultUser' DNS_MODE='$DnsMode' '$MntBootstrap' phase2"
-    if ($PSCmdlet.ShouldProcess("WSL '$DistroName'", "Run Phase 2")) {
-      Invoke-WslChecked -ArgList @('-d', $DistroName, '-u', 'root', '--', 'bash', '-lc', $cmd) -ErrorContext "Phase 2"
-    }
+  $cmd = New-PhaseCommand -Phase $Phase -MntBootstrap $MntBootstrap -MntRepoRoot $MntRepoRoot
+  $context = if ($Phase -eq 'phase1') { "Run Phase 1 as root" } else { "Run Phase 2" }
+  if ($PSCmdlet.ShouldProcess("WSL '$DistroName'", $context)) {
+    Invoke-WslChecked -ArgList @('-d', $DistroName, '-u', 'root', '--', 'bash', '-lc', $cmd) -ErrorContext "Phase $Phase"
+  }
+}
+
+function Restart-Wsl {
+  if ($PSCmdlet.ShouldProcess("WSL", "Shutdown")) {
+    & wsl.exe --shutdown
   }
 }
 
@@ -221,10 +276,8 @@ function Main {
   Set-WslConfigFile
 
   Write-Status "[*] Applying .wslconfig (wsl --shutdown)..." -Color Cyan
-  if ($PSCmdlet.ShouldProcess("WSL", "Shutdown")) {
-    & wsl.exe --shutdown
-    Start-Sleep -Milliseconds 1500
-  }
+  Restart-Wsl
+  Start-Sleep -Milliseconds 1500
 
   Write-Status "[*] Checking WSL installation..." -Color DarkGray
   & wsl.exe --status | Out-Null
@@ -240,15 +293,13 @@ function Main {
   $mntRepoRoot  = ConvertTo-WslPath -WindowsPath $repoRoot
 
   Write-Status "[*] Preparing distro '$DistroName'..." -Color Cyan
-  Install-WslDistribution
+  Ensure-WslDistributionPresent -Name $DistroName -ForceReinstall:$Force
 
   Write-Status "[*] Running Phase 1 inside WSL as root..." -Color Cyan
   Invoke-WslPhase -Phase 'phase1' -MntBootstrap $mntBootstrap -MntRepoRoot $mntRepoRoot
 
   Write-Status "[*] Shutting down WSL to activate systemd and default user..." -Color Cyan
-  if ($PSCmdlet.ShouldProcess("WSL", "Shutdown")) {
-    & wsl.exe --shutdown
-  }
+  Restart-Wsl
 
   Write-Status "[*] Running Phase 2 inside WSL..." -Color Cyan
   Invoke-WslPhase -Phase 'phase2' -MntBootstrap $mntBootstrap -MntRepoRoot $mntRepoRoot

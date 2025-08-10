@@ -753,10 +753,10 @@ phase1_main() {
     "Repo root (mnt)" "${REPO_ROOT_MNT:-<auto>}"
 
   # Optional interactive DNS selection if requested and in TTY
-  if [[ -t 1 && "${PROMPT_DNS_MODE:-0}" = "1" ]]; then
-    DNS_MODE="$(ui::choose "DNS mode" static resolved wsl)"
-    ui::ok "Selected DNS mode: ${DNS_MODE}"
-  fi
+  # if [[ -t 1 && "${PROMPT_DNS_MODE:-0}" = "1" ]]; then
+  #   DNS_MODE="$(ui::choose "DNS mode" static resolved wsl)"
+  #   ui::ok "Selected DNS mode: ${DNS_MODE}"
+  # fi
 
   ui::step "Ensure locale" ensure_locale
   ui::step "Updating system" pacman_quiet_update

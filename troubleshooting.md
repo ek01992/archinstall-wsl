@@ -25,7 +25,7 @@
 
 ## DNS failures
 
-- Switching modes:
+### Switching modes
 
   ```bash
   # Inside WSL (root)
@@ -34,14 +34,14 @@
   DNS_MODE=wsl      ./bootstrap.sh phase1   # removes resolv.conf; WSL will regenerate
   ```
 
-- Check resolv.conf:
+### Check resolv.conf
 
   ```bash
   ls -l /etc/resolv.conf
   readlink -f /etc/resolv.conf 2>/dev/null || true
   ```
 
-- Resolved diagnostics:
+### Resolved diagnostics
 
   ```bash
   sudo systemctl status systemd-resolved --no-pager

@@ -1,18 +1,18 @@
 # Quick start (Windows host)
 
-- Default install:
+## Default install
 
   ```powershell
   pwsh -NoProfile -File .\setup-wsl.ps1
   ```
 
-- Choose DNS mode:
+## Choose DNS mode
 
   ```powershell
   pwsh -NoProfile -File .\setup-wsl.ps1 -DnsMode static     # or resolved | wsl
   ```
 
-- Rerun Phase 2 (if you tweak config and want to re-finalize):
+## Rerun Phase 2 (if you tweak config and want to re-finalize)
 
   ```powershell
   # Phase 2 is run automatically by setup-wsl.ps1.
@@ -20,9 +20,9 @@
   wsl -d archlinux -u root -- bash -lc "cd /mnt/$(($pwd.Path.Substring(0,1)).ToLower())$($pwd.Path.Substring(2) -replace '\\','/') ; DEFAULT_USER='erik' DNS_MODE='static' ./bootstrap.sh phase2"
   ```
 
-## Common variants
+## Custom variants
 
-- Custom distro name, user, CPUs/memory/swap:
+### Custom distro name, user, CPUs/memory/swap
 
   ```powershell
   $env:WSL_MEMORY = '12GB'
@@ -34,7 +34,7 @@
     -SwapGB 8
   ```
 
-- Run `bootstrap.sh` directly inside WSL:
+### Run `bootstrap.sh` directly inside WSL
 
   ```bash
   # Phase 1 (root)

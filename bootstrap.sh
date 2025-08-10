@@ -14,25 +14,21 @@ DNS_MODE="${DNS_MODE:-static}"
 # -----------------------------
 # Declarative toggles and params
 # -----------------------------
-# DNS settings when we manage resolv.conf ourselves (static mode)
 NAMESERVERS=("1.1.1.1" "9.9.9.9")
 RESOLV_OPTIONS_CSV="${RESOLV_OPTIONS_CSV:-edns0}"
 CHATTR_IMMUTABLE_RESOLV="${CHATTR_IMMUTABLE_RESOLV:-true}"
 
-# Sudo policy
 ALLOW_NOPASSWD_SUDO="${ALLOW_NOPASSWD_SUDO:-true}"
 SUDO_NOPASSWD_CMDS="${SUDO_NOPASSWD_CMDS:-ALL}"
 
-# Toolchain installer pins
 PYENV_VERSION_TAG="${PYENV_VERSION_TAG:-v2.4.17}"
 NVM_VERSION_TAG="${NVM_VERSION_TAG:-v0.39.7}"
 PY_VER="${PY_VER:-3.12.5}"
 RUST_TOOLCHAIN="${RUST_TOOLCHAIN:-stable}"
 RUST_COMPONENTS_CSV="${RUST_COMPONENTS_CSV:-rustfmt,clippy}"
-NODE_VERSION="${NODE_VERSION:-}"              # empty => use LTS
-PYTHON_MODULES_CSV="${PYTHON_MODULES_CSV:-}"  # extra python packages to pip install after setup, CSV
+NODE_VERSION="${NODE_VERSION:-}"
+PYTHON_MODULES_CSV="${PYTHON_MODULES_CSV:-}"
 
-# Feature toggles
 OPTIMIZE_MIRRORS="${OPTIMIZE_MIRRORS:-true}"
 ENABLE_CONTAINER_PKGS="${ENABLE_CONTAINER_PKGS:-true}"
 ENABLE_OPTIONAL_LANG_PACKAGES="${ENABLE_OPTIONAL_LANG_PACKAGES:-true}"
@@ -48,14 +44,11 @@ ENABLE_PODMAN_SOCKET="${ENABLE_PODMAN_SOCKET:-true}"
 ENABLE_SYSTEMD_RESOLVED="${ENABLE_SYSTEMD_RESOLVED:-true}"
 RUN_PODMAN_TEST="${RUN_PODMAN_TEST:-true}"
 
-# Optional custom task ordering per phase (CSV of task keys; see execute_*_task)
 PHASE1_TASKS_CSV="${PHASE1_TASKS_CSV:-}"
 PHASE2_TASKS_CSV="${PHASE2_TASKS_CSV:-}"
 
-# Package selections
 BASE_PACKAGES=(
   base-devel sudo curl git wget unzip zip jq ripgrep fzf tmux htop lsof rsync openssh net-tools
-  # Python build deps (ensure ssl, sqlite3, tkinter, etc. are compiled)
   openssl zlib xz tk readline sqlite gdbm libffi bzip2 ncurses
 )
 CONTAINER_PACKAGES=(
@@ -64,15 +57,11 @@ CONTAINER_PACKAGES=(
 OPTIONAL_LANG_PACKAGES=( go )
 OPTIONAL_DOTFILES_HELPERS=( neovim direnv starship )
 
-# Allow overriding package arrays via CSV
 BASE_PACKAGES_CSV="${BASE_PACKAGES_CSV:-}"
 CONTAINER_PACKAGES_CSV="${CONTAINER_PACKAGES_CSV:-}"
 OPTIONAL_LANG_PACKAGES_CSV="${OPTIONAL_LANG_PACKAGES_CSV:-}"
 OPTIONAL_DOTFILES_HELPERS_CSV="${OPTIONAL_DOTFILES_HELPERS_CSV:-}"
 
-# --------------------------------------------
-# Small helpers
-# --------------------------------------------
 TS() { date +'%F %T'; }
 log() { printf "[%s] %s %s\n" "$(TS)" "${1}" "${2}"; }
 fail() { log "!" "${1}"; exit 1; }
@@ -90,7 +79,6 @@ retry() {
 }
 
 csv_to_array() {
-  # csv_to_array "a,b , c" OUTVAR
   local csv="$1"; local -n out="$2"
   IFS=',' read -ra __parts <<< "$csv"
   out=()
@@ -102,16 +90,12 @@ csv_to_array() {
   done
 }
 
-# Apply overrides from CSV envs early
 if [ -n "${NAMESERVERS_CSV:-}" ]; then csv_to_array "$NAMESERVERS_CSV" NAMESERVERS; fi
 if [ -n "${BASE_PACKAGES_CSV:-}" ]; then csv_to_array "$BASE_PACKAGES_CSV" BASE_PACKAGES; fi
 if [ -n "${CONTAINER_PACKAGES_CSV:-}" ]; then csv_to_array "$CONTAINER_PACKAGES_CSV" CONTAINER_PACKAGES; fi
 if [ -n "${OPTIONAL_LANG_PACKAGES_CSV:-}" ]; then csv_to_array "$OPTIONAL_LANG_PACKAGES_CSV" OPTIONAL_LANG_PACKAGES; fi
 if [ -n "${OPTIONAL_DOTFILES_HELPERS_CSV:-}" ]; then csv_to_array "$OPTIONAL_DOTFILES_HELPERS_CSV" OPTIONAL_DOTFILES_HELPERS; fi
 
-# --------------------------------------------
-# TTY-aware UI helpers
-# --------------------------------------------
 _ui_is_tty() { [ -t 1 ]; }
 _ui_cols() { tput cols 2>/dev/null || printf 80; }
 _ui_utf8() { case "${LANG:-}${LC_ALL:-}${LC_CTYPE:-}" in *UTF-8*|*utf8*) return 0;; *) return 1;; esac; }
@@ -126,16 +110,34 @@ else
 fi
 
 if [ -n "${UI_ASCII:-}" ] || ! _ui_utf8; then
-  UI_CHAR_TL="+"; UI_CHAR_TR="+"; UI_CHAR_BL="+"; UI_CHAR_BR="+"; UI_CHAR_H="-"; UI_CHAR_V="|"; UI_LEADER=">"
+  UI_CHAR_TL="+"
+  UI_CHAR_TR="+"
+  UI_CHAR_BL="+"
+  UI_CHAR_BR="+"
+  UI_CHAR_H="-"
+  UI_CHAR_V="|"
+  # shellcheck disable=SC2034
+  UI_LEADER=">"
 else
-  UI_CHAR_TL="┌"; UI_CHAR_TR="┐"; UI_CHAR_BL="└"; UI_CHAR_BR="┘"; UI_CHAR_H="─"; UI_CHAR_V="│"; UI_LEADER="▶"
+  UI_CHAR_TL="┌"
+  UI_CHAR_TR="┐"
+  UI_CHAR_BL="└"
+  UI_CHAR_BR="┘"
+  UI_CHAR_H="─"
+  UI_CHAR_V="│"
+  # shellcheck disable=SC2034
+  UI_LEADER="▶"
 fi
 
 UI_VERBOSE="${UI_VERBOSE:-0}"
 UI_LOGFILE="${UI_LOGFILE:-}"
 
 ui::cols() { _ui_cols; }
-ui::hr() { local w; w="$(_ui_cols)"; local n=$(( w - 2 )); [ "$n" -lt 10 ] && n=10; printf '%*s' "$n" | tr ' ' "$UI_CHAR_H"; }
+ui::hr() {
+  local w; w="$(_ui_cols)"
+  local n=$(( w - 2 )); [ "$n" -lt 10 ] && n=10
+  printf '%*s' "$n" "" | tr ' ' "$UI_CHAR_H"
+}
 ui::section() { printf "%b%s%s%b\n" "${MUTED}" "${UI_CHAR_TL}$(ui::hr)${UI_CHAR_TR}" "" "${RESET}"; printf "%b%s %s%b\n" "${BOLD}${CYAN}" "${UI_CHAR_V}" "$*" "${RESET}"; printf "%b%s%s%b\n" "${MUTED}" "${UI_CHAR_BL}$(ui::hr)${UI_CHAR_BR}" "" "${RESET}"; }
 ui::info()  { printf "%b\n" "${CYAN}[*]${RESET} $*"; }
 ui::ok()    { printf "%b\n" "${GREEN}[+]${RESET} $*"; }
@@ -171,7 +173,6 @@ ui::step() {
   fi
 }
 
-# Provide sudo fallback when not installed (Phase 1 runs as root).
 if ! command -v sudo >/dev/null 2>&1; then
   sudo() {
     if [ "$#" -ge 3 ] && [ "$1" = "-u" ]; then
@@ -220,9 +221,6 @@ ensure_user_rc_files() {
   if [ ! -e "$home_dir/.profile" ]; then install -o "$user" -g "$user" -m 0644 -D /dev/null "$home_dir/.profile"; else chown "$user:$user" "$home_dir/.profile" || true; fi
 }
 
-# --------------------------------------------
-# Locale
-# --------------------------------------------
 configure_locale_gen() { ui::info "Configuring /etc/locale.gen for en_US.UTF-8"; sudo sed -i 's/^# *en_US.UTF-8/en_US.UTF-8/' /etc/locale.gen; }
 generate_locale() { ui::info "Generating locales"; sudo locale-gen; }
 persist_locale_env() {
@@ -234,9 +232,6 @@ persist_locale_env() {
 }
 ensure_locale() { configure_locale_gen; generate_locale; persist_locale_env; }
 
-# --------------------------------------------
-# Pacman configuration and update
-# --------------------------------------------
 ensure_pacman_parallel_downloads() {
   if ! grep -q '^\[options\]' /etc/pacman.conf; then printf "\n[options]\n" | sudo tee -a /etc/pacman.conf >/dev/null; fi
   local pd; pd="$(nproc 2>/dev/null || echo 2)"; pd=$(( pd * 2 )); [ "$pd" -gt 16 ] && pd=16; [ "$pd" -lt 2 ] && pd=2
@@ -288,9 +283,6 @@ install_packages() {
   fi
 }
 
-# --------------------------------------------
-# User and privileges
-# --------------------------------------------
 ensure_user_and_sudo() {
   local user="$1"
   if ! id -u "$user" >/dev/null 2>&1; then ui::info "Creating user $user"; sudo useradd -m -s /bin/bash "$user"; fi
@@ -313,9 +305,6 @@ ensure_subids() {
   fi
 }
 
-# --------------------------------------------
-# WSL configuration
-# --------------------------------------------
 configure_wsl() {
   ui::info "Writing /etc/wsl.conf (systemd=true, resolv.conf mode: ${DNS_MODE}, default user)"
   local gen="true"
@@ -332,20 +321,17 @@ generateResolvConf=${gen}
 EOF
 }
 
-# --------------------------------------------
-# DNS configuration
-# --------------------------------------------
 ensure_resolv_unlocked() { if command -v chattr >/dev/null 2>&1; then sudo chattr -i /etc/resolv.conf 2>/dev/null || true; fi; sudo rm -f /etc/resolv.conf || true; }
 
 resolv_options_line() {
   [ -z "${RESOLV_OPTIONS_CSV:-}" ] && return 0
   IFS=',' read -ra __opts <<< "$RESOLV_OPTIONS_CSV"
-  local out="options"; local o
+  local opts_line="options"; local o
   for o in "${__opts[@]}"; do
     o="${o#"${o%%[![:space:]]*}"}"; o="${o%"${o##*[![:space:]]}"}"
-    [ -n "$o" ] && out="$out $o"
+    [ -n "$o" ] && opts_line="$opts_line $o"
   done
-  printf '%s\n' "$out"
+  printf '%s\n' "$opts_line"
 }
 
 write_static_resolv_conf() {
@@ -390,9 +376,6 @@ configure_dns() {
   esac
 }
 
-# --------------------------------------------
-# User toolchains and dotfiles
-# --------------------------------------------
 install_pyenv_for_user() {
   [ "${ENABLE_PYENV}" != "true" ] && { ui::warn "pyenv disabled (ENABLE_PYENV=false)"; return 0; }
   local user="$1"; local home_dir; home_dir="$(get_user_home "$user")" || fail "Could not determine home for user '$user'"
@@ -418,12 +401,19 @@ install_pyenv_for_user() {
     "
   fi
 
+  # shellcheck disable=SC2016
   append_once 'export PYENV_ROOT="$HOME/.pyenv"' "${home_dir}/.bashrc"
+  # shellcheck disable=SC2016
   append_once '[[ -d $PYENV_ROOT/bin ]] && export PATH="$PYENV_ROOT/bin:$PATH"' "${home_dir}/.bashrc"
+  # shellcheck disable=SC2016
   append_once 'eval "$(pyenv init -)"' "${home_dir}/.bashrc"
+  # shellcheck disable=SC2016
   append_once '[ -d "$HOME/.pyenv/plugins/pyenv-virtualenv" ] && eval "$(pyenv virtualenv-init -)"' "${home_dir}/.bashrc"
+  # shellcheck disable=SC2016
   append_once 'export PYENV_ROOT="$HOME/.pyenv"' "${home_dir}/.profile"
+  # shellcheck disable=SC2016
   append_once '[[ -d $PYENV_ROOT/bin ]] && export PATH="$PYENV_ROOT/bin:$PATH"' "${home_dir}/.profile"
+  # shellcheck disable=SC2016
   append_once 'eval "$(pyenv init -)"' "${home_dir}/.profile"
 
   sudo chown "$user:$user" "${home_dir}/.bashrc" "${home_dir}/.profile" 2>/dev/null || true
@@ -443,10 +433,15 @@ install_nvm_for_user() {
       git checkout ${NVM_VERSION_TAG}
     "
   fi
+  # shellcheck disable=SC2016
   append_once 'export NVM_DIR="$HOME/.nvm"' "${home_dir}/.bashrc"
+  # shellcheck disable=SC2016
   append_once '[ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"' "${home_dir}/.bashrc"
+  # shellcheck disable=SC2016
   append_once '[ -s "$NVM_DIR/bash_completion" ] && . "$NVM_DIR/bash_completion"' "${home_dir}/.bashrc"
+  # shellcheck disable=SC2016
   append_once 'export NVM_DIR="$HOME/.nvm"' "${home_dir}/.profile"
+  # shellcheck disable=SC2016
   append_once '[ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"' "${home_dir}/.profile"
   sudo chown "$user:$user" "${home_dir}/.bashrc" "${home_dir}/.profile" 2>/dev/null || true
   sudo chown -R "$user:$user" "${home_dir}/.nvm" 2>/dev/null || true
@@ -463,6 +458,7 @@ install_rustup_for_user() {
       curl --proto "=https" --tlsv1.2 -fsSL https://sh.rustup.rs | sh -s -- -y --profile minimal --default-toolchain stable --no-modify-path
     '
   fi
+  # shellcheck disable=SC2016
   append_once 'export PATH="$HOME/.cargo/bin:$PATH"' "${home_dir}/.bashrc"
   sudo chown "$user:$user" "${home_dir}/.bashrc" "${home_dir}/.profile" 2>/dev/null || true
   sudo chown -R "$user:$user" "${home_dir}/.cargo" 2>/dev/null || true
@@ -502,9 +498,6 @@ link_dotfiles_for_user() {
   fi
 }
 
-# --------------------------------------------
-# Services and finalize
-# --------------------------------------------
 is_systemd_active() { local pid1; pid1="$(ps -p 1 -o comm= 2>/dev/null || true)"; [ "$pid1" = "systemd" ]; }
 ensure_systemd_active_or_fail() { if ! is_systemd_active; then fail "systemd is not active (PID 1 != systemd). Restart WSL with systemd=true and rerun phase2."; fi; }
 
@@ -645,9 +638,6 @@ cleanup_for_snapshot() {
   sudo journalctl --vacuum-time=1s >/dev/null 2>&1 || true
 }
 
-# --------------------------------------------
-# Task engine (optional declarative task lists)
-# --------------------------------------------
 execute_phase1_task() {
   local t="$1"
   case "$t" in
@@ -689,9 +679,6 @@ run_csv_tasks() {
   done
 }
 
-# --------------------------------------------
-# Phases
-# --------------------------------------------
 phase1_main() {
   ui::section "Phase 1"
   ui::section "Preflight summary"

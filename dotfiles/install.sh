@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-ROOT="$(cd "$(dirname "${BASH_SOURCE}")" && pwd)"
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 echo "[*] Installing dotfiles from $ROOT"
 
 mkdir -p "$HOME/.config" "$HOME/.cargo" "$HOME/.config/nvim"

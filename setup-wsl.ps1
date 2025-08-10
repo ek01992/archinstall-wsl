@@ -140,13 +140,14 @@ function Get-TextEncoding {
   param([Parameter(Mandatory)][string]$Name)
   switch ($Name.ToLowerInvariant()) {
     'utf8nobom' { return (New-Object System.Text.UTF8Encoding($false)) }
-    'utf8'      { return [System.Text.Encoding]::UTF8 }           # .NET Core UTF8 has no BOM
+    'utf8'      { return [System.Text.Encoding]::UTF8 }
     'ascii'     { return [System.Text.Encoding]::GetEncoding('us-ascii') }
     default     { try { return [System.Text.Encoding]::GetEncoding($Name) } catch { return [System.Text.Encoding]::UTF8 } }
   }
 }
 
-function Ensure-ExecutionPolicy {
+[CmdletBinding(SupportsShouldProcess=$true)]
+function Set-ExecutionPolicyIfNeeded {
   try {
     $scope = 'CurrentUser'
     $policy = Get-ExecutionPolicy -Scope $scope -ErrorAction SilentlyContinue
@@ -161,7 +162,15 @@ function Ensure-ExecutionPolicy {
 }
 
 function Test-WslAvailable { & wsl.exe --status *> $null; return ($LASTEXITCODE -eq 0) }
-function Set-WslDefaultVersion2 { if ($PSCmdlet.ShouldProcess("WSL default version", "Set to 2")) { try { $null = & wsl.exe --set-default-version 2 } catch { } ; Write-StatusEx -Level Info -Text "WSL default version set to 2." } }
+
+[CmdletBinding(SupportsShouldProcess=$true)]
+function Set-WslDefaultVersion2 {
+  if ($PSCmdlet.ShouldProcess("WSL default version", "Set to 2")) {
+    try { $null = & wsl.exe --set-default-version 2 } catch { }
+    Write-StatusEx -Level Info -Text "WSL default version set to 2."
+  }
+}
+
 function Get-WslDistributions { & wsl.exe --list --quiet | ForEach-Object { $_.Trim() } | Where-Object { $_ -ne '' } }
 function Test-WslDistributionExists { param([Parameter(Mandatory)][string]$Name) $d = Get-WslDistributions; return ($d -contains $Name) }
 function Wait-WslDistribution { param([Parameter(Mandatory)][string]$Name, [int]$TimeoutSec = 60) $sw = [Diagnostics.Stopwatch]::StartNew(); while ($sw.Elapsed.TotalSeconds -lt $TimeoutSec) { if (Test-WslDistributionExists -Name $Name) { return $true }; Start-Sleep -Seconds 2 }; return $false }
@@ -176,6 +185,7 @@ localhostForwarding=true
 "@
 }
 
+[CmdletBinding(SupportsShouldProcess=$true)]
 function Set-FileContentIfChanged {
   param(
     [Parameter(Mandatory)][string]$Path,
@@ -197,7 +207,6 @@ function Set-FileContentIfChanged {
     }
   }
   if ($shouldWrite -and $PSCmdlet.ShouldProcess($Path, "Write updated content")) {
-    # Write exact bytes to ensure correct encoding (no BOM if requested)
     [System.IO.File]::WriteAllBytes($Path, $newBytes)
     Write-StatusEx -Level Ok -Text "Wrote $Path"
   }
@@ -231,14 +240,17 @@ function ConvertTo-Lf {
   return $temp
 }
 Set-Alias -Name Convert-ToLF -Value ConvertTo-Lf -Scope Local -ErrorAction SilentlyContinue
-function Prepare-BootstrapScript { return (ConvertTo-Lf -Path $bootstrapLocal) }
 
+function ConvertTo-BootstrapLf { return (ConvertTo-Lf -Path $bootstrapLocal) }
+
+[CmdletBinding(SupportsShouldProcess=$true)]
 function Invoke-WslChecked {
   param([Parameter(Mandatory)][string[]]$ArgList, [Parameter(Mandatory)][string]$ErrorContext)
   & wsl.exe @ArgList
   if ($LASTEXITCODE -ne 0) { throw "$ErrorContext failed with exit code $LASTEXITCODE" }
 }
 
+[CmdletBinding(SupportsShouldProcess=$true)]
 function Remove-WslDistribution {
   param([Parameter(Mandatory)][string]$Name)
   if ($PSCmdlet.ShouldProcess("WSL distro '$Name'", "Unregister")) {
@@ -247,6 +259,8 @@ function Remove-WslDistribution {
     & wsl.exe --unregister $Name
   }
 }
+
+[CmdletBinding(SupportsShouldProcess=$true)]
 function Install-WslDistributionNoLaunch {
   param([Parameter(Mandatory)][string]$Name)
   if ($PSCmdlet.ShouldProcess("WSL distro '$Name'", "Install --no-launch")) {
@@ -255,18 +269,30 @@ function Install-WslDistributionNoLaunch {
     if (-not (Wait-WslDistribution -Name $Name -TimeoutSec 120)) { throw "Distro '$Name' did not appear after install." }
   }
 }
-function Ensure-WslDistributionPresent {
-  param([Parameter(Mandatory)][string]$Name, [switch]$ForceReinstall)
+
+[CmdletBinding()]
+function Install-WslDistributionIfNeeded {
+  param(
+    [Parameter(Mandatory)][string]$Name,
+    [switch]$ForceReinstall
+  )
   if (Test-WslDistributionExists -Name $Name) {
     if (-not $ForceReinstall) {
       $resp = Read-Host "Distro '$Name' exists. Unregister it and reinstall? (y/N)"
-      if ($resp -notin @("y","Y")) { return }
+      if ($resp -notin @("y","Y")) {
+        return
+      }
     }
     Remove-WslDistribution -Name $Name
   }
   Install-WslDistributionNoLaunch -Name $Name
 }
-function Initialize-WslDistribution { param([Parameter(Mandatory)][string]$Name, [switch]$ForceReinstall) Ensure-WslDistributionPresent -Name $Name -ForceReinstall:$ForceReinstall }
+
+function Initialize-WslDistribution {
+  param([Parameter(Mandatory)][string]$Name,[switch]$ForceReinstall)
+  Install-WslDistributionIfNeeded -Name $Name -ForceReinstall:$ForceReinstall
+}
+
 function Resolve-DistroName {
   param([string]$Requested)
   $online = (& wsl.exe --list --online 2>$null) -join "`n"
@@ -276,10 +302,9 @@ function Resolve-DistroName {
 }
 
 # ---- Pass-through env to WSL phases (declarative control) ----
-function Escape-BashSingleQuoted {
+function ConvertTo-BashSingleQuotedLiteral {
   param([string]$s)
   if ($null -eq $s) { return '' }
-  # Replace single quotes with the bash-safe sequence: '"'"'
   return ($s -replace "'", "'""'""'")
 }
 function Build-EnvAssignments {
@@ -288,13 +313,12 @@ function Build-EnvAssignments {
   foreach ($n in $Names) {
     $v = [System.Environment]::GetEnvironmentVariable($n)
     if ([string]::IsNullOrEmpty($v)) { continue }
-    $esc = Escape-BashSingleQuoted $v
+    $esc = ConvertTo-BashSingleQuotedLiteral $v
     [void]$sb.Append("$n='$esc' ")
   }
   return $sb.ToString()
 }
 
-# Optional sets we forward if defined (explicit basics kept separate)
 $OptionalEnvPhase1 = @(
   'ALLOW_NOPASSWD_SUDO','SUDO_NOPASSWD_CMDS','OPTIMIZE_MIRRORS',
   'PYENV_VERSION_TAG','NVM_VERSION_TAG','PY_VER',
@@ -333,6 +357,7 @@ function New-PhaseCommand {
   }
 }
 
+[CmdletBinding(SupportsShouldProcess=$true)]
 function Invoke-WslPhase {
   param(
     [Parameter(Mandatory)][ValidateSet('phase1','phase2')] [string]$Phase,
@@ -346,7 +371,10 @@ function Invoke-WslPhase {
   }
 }
 
+[CmdletBinding(SupportsShouldProcess=$true)]
 function Restart-Wsl { if ($PSCmdlet.ShouldProcess("WSL", "Shutdown")) { & wsl.exe --shutdown } }
+
+[CmdletBinding(SupportsShouldProcess=$true)]
 function Export-WslSnapshot {
   if ($PSCmdlet.ShouldProcess("WSL '$DistroName'", "Terminate before export")) { & wsl.exe --terminate $DistroName }
   if ($PSCmdlet.ShouldProcess("WSL '$DistroName'", "Export to $snapshotFile")) {
@@ -375,12 +403,13 @@ function Show-Plan {
   Write-Host ""
 }
 
+[Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseDeclaredVarsMoreThanAssignments','', Justification='DnsMode is used in UI and passed to WSL via New-PhaseCommand')]
 function Main {
   $DistroName = Resolve-DistroName -Requested $DistroName
 
   Write-Section "Preflight summary"
   Show-Preflight
-  Ensure-ExecutionPolicy
+  Set-ExecutionPolicyIfNeeded
 
   if (-not $PSBoundParameters.ContainsKey('DnsMode') -and $IsTty) {
     $DnsMode = Read-TuiChoice -Title "DNS mode" -Message "Select DNS strategy" -Choices @('static','resolved','wsl') -DefaultIndex 0
@@ -402,7 +431,7 @@ function Main {
   Write-Section "Plan"
   Show-Plan
 
-  $tempBootstrap = Prepare-BootstrapScript
+  $tempBootstrap = ConvertTo-BootstrapLf
   if ($tempBootstrap.StartsWith("\") -or $repoRoot.StartsWith("\")) {
     throw "Repository or temp path is a UNC path. Please use a local drive path for correct /mnt mapping."
   }
@@ -410,7 +439,7 @@ function Main {
   $mntRepoRoot  = ConvertTo-WslPath -WindowsPath $repoRoot
 
   Write-Section "Phase 1"
-  Invoke-Step -Activity "Prepare distro '$DistroName'" -Script { Ensure-WslDistributionPresent -Name $DistroName -ForceReinstall:$Force }
+  Invoke-Step -Activity "Prepare distro '$DistroName'" -Script { Install-WslDistributionIfNeeded -Name $DistroName -ForceReinstall:$Force }
   Invoke-Step -Activity "Run Phase 1 inside WSL" -Script { Invoke-WslPhase -Phase 'phase1' -MntBootstrap $mntBootstrap -MntRepoRoot $mntRepoRoot }
 
   Write-Section "Phase 2"

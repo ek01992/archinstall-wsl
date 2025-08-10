@@ -1,3 +1,4 @@
+# shellcheck shell=bash
 alias ll='ls -lah --color=auto'
 alias gs='git status'
 alias gd='git diff'

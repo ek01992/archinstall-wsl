@@ -1,4 +1,7 @@
+# shellcheck shell=bash
+
 # Load aliases
+# shellcheck disable=SC1090
 [ -f ~/.bash_aliases ] && source ~/.bash_aliases
 
 # History settings
@@ -21,12 +24,16 @@ fi
 if [ -d "$HOME/.pyenv" ]; then
   export PATH="$HOME/.pyenv/bin:$PATH"
   eval "$(pyenv init -)"
-  eval "$(pyenv virtualenv-init -)"
+  if [ -d "$HOME/.pyenv/plugins/pyenv-virtualenv" ]; then
+    eval "$(pyenv virtualenv-init -)"
+  fi
 fi
 
 # nvm
 export NVM_DIR="$HOME/.nvm"
+# shellcheck source=/dev/null
 [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"
+# shellcheck source=/dev/null
 [ -s "$NVM_DIR/bash_completion" ] && . "$NVM_DIR/bash_completion"
 
 # rust

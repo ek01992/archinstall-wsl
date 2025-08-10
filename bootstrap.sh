@@ -22,6 +22,8 @@ CHATTR_IMMUTABLE_RESOLV="${CHATTR_IMMUTABLE_RESOLV:-true}"
 # Package selections
 BASE_PACKAGES=(
   base-devel curl git wget unzip zip jq ripgrep fzf tmux htop lsof rsync openssh net-tools
+  # Python build deps (ensure ssl, sqlite3, tkinter, etc. are compiled)
+  openssl zlib xz tk readline sqlite gdbm libffi bzip2 ncurses
 )
 CONTAINER_PACKAGES=(
   crun conmon containers-common aardvark-dns netavark slirp4netns fuse-overlayfs podman buildah skopeo
@@ -413,16 +415,6 @@ finalize_user_toolchains() {
 
   log "*" "Finalizing toolchains for ${user} (Node LTS, Python ${PY_VER}, pip upgrade, rust components)"
 
-  sudo -u "$user" bash -lc '
-    set -e
-    [ -f "$HOME/.profile" ] && . "$HOME/.profile"
-    [ -f "$HOME/.bashrc" ] && . "$HOME/.bashrc"
-    export NVM_DIR="$HOME/.nvm"
-    [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"
-    nvm install --lts
-    nvm alias default lts/*
-  '
-
   sudo -u "$user" bash -lc "
     set -e
     [ -f \"\$HOME/.profile\" ] && . \"\$HOME/.profile\"
@@ -431,6 +423,13 @@ finalize_user_toolchains() {
     [ -d \"\$PYENV_ROOT/bin\" ] && export PATH=\"\$PYENV_ROOT/bin:\$PATH\"
     if command -v pyenv >/dev/null 2>&1; then
       eval \"\$(pyenv init -)\"
+      # If version exists but missing critical modules (ssl/sqlite3/tkinter), rebuild it
+      if pyenv versions --bare | grep -qx \"${PY_VER}\"; then
+        if ! PYENV_VERSION=\"${PY_VER}\" python -c \"import ssl, sqlite3, tkinter\" >/dev/null 2>&1; then
+          echo \"Detected incomplete Python ${PY_VER}; rebuilding with required libs...\"
+          pyenv uninstall -f ${PY_VER}
+        fi
+      fi
       pyenv install -s ${PY_VER} || { echo 'Warning: pyenv failed to install ${PY_VER}, will use system python'; exit 0; }
       pyenv global ${PY_VER}
       python -m pip install --upgrade pip || true

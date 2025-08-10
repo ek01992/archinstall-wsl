@@ -1,0 +1,125 @@
+#!/bin/bash
+# Arch WSL orchestration CLI
+#
+# Description: Thin CLI that orchestrates Arch-on-WSL bootstrap phases using
+# modular bash libraries. Follows project shell standards.
+#
+# Usage: arch-wsl <command>
+# Commands:
+#   phase1     Base system, packages, user, WSL/DNS, toolchains init, dotfiles
+#   phase2     Services, finalize toolchains, cleanup
+#   doctor     Environment checks and diagnostics
+#   version    Print version
+#   help       Show this help
+
+set -Eeuo pipefail
+IFS=$'\n\t'
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ROOT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
+
+# shell libraries (non-executable .sh files)
+. "${ROOT_DIR}/lib/bash/common.sh"
+. "${ROOT_DIR}/lib/bash/config.sh"
+. "${ROOT_DIR}/lib/bash/system.sh"
+. "${ROOT_DIR}/lib/bash/wsl.sh"
+. "${ROOT_DIR}/lib/bash/dns.sh"
+. "${ROOT_DIR}/lib/bash/users.sh"
+. "${ROOT_DIR}/lib/bash/dotfiles.sh"
+. "${ROOT_DIR}/lib/bash/toolchains.sh"
+. "${ROOT_DIR}/lib/bash/services.sh"
+
+#######################################
+# Print usage help for this CLI
+# Globals: None
+# Args: None
+# Outputs: Help text to STDOUT
+#######################################
+usage() {
+  cat <<EOF
+Usage: $(basename "$0") <command>
+
+Commands:
+  phase1     Base system, packages, user, WSL/DNS, toolchains init, dotfiles
+  phase2     Services, finalize toolchains, cleanup
+  doctor     Environment checks and diagnostics
+  version    Print version
+  help       Show this help
+EOF
+}
+
+#######################################
+# Print version string
+# Globals: ROOT_DIR
+# Args: None
+# Outputs: Version to STDOUT
+#######################################
+version() {
+  echo "arch-wsl $(load_version)"
+}
+
+#######################################
+# Execute Phase 1 (system base + dev prerequisites)
+# Globals: DEFAULT_USER, DNS_MODE, OPTIMIZE_MIRRORS
+# Args: None (reads env & config)
+# Returns: None
+#######################################
+phase1() {
+  require_root
+  ensure_sudo_fallback
+  load_config
+  log "*" "Phase 1: user=${DEFAULT_USER} DNS_MODE=${DNS_MODE} OPTIMIZE_MIRRORS=${OPTIMIZE_MIRRORS}"
+
+  ensure_locale
+  pacman_quiet_update
+  install_packages
+  ensure_user_and_sudo "${DEFAULT_USER}"
+  ensure_subids "${DEFAULT_USER}"
+  configure_wsl "${DEFAULT_USER}" "${DNS_MODE}"
+  configure_dns "${DNS_MODE}"
+  install_pyenv_nvm_rustup_for_user "${DEFAULT_USER}"
+  link_dotfiles_for_user "${DEFAULT_USER}"
+
+  log "+" "Phase 1 complete. Restart WSL, then run phase2."
+}
+
+#######################################
+# Execute Phase 2 (services, finalize toolchains)
+# Globals: DEFAULT_USER, DNS_MODE
+# Args: None (reads env & config)
+# Returns: None
+#######################################
+phase2() {
+  require_root
+  ensure_sudo_fallback
+  load_config
+  log "*" "Phase 2"
+
+  enable_services "${DNS_MODE}"
+  finalize_user_toolchains "${DEFAULT_USER}"
+  cleanup_for_snapshot
+  post_dns_summary_if_resolved "${DNS_MODE}"
+  log "+" "Phase 2 complete. You can export a snapshot."
+}
+
+#######################################
+# Basic diagnostics
+# Globals: DEFAULT_USER, DNS_MODE
+# Args: None
+# Returns: None
+#######################################
+doctor() {
+  require_root
+  load_config
+  doctor_checks "${DEFAULT_USER}" "${DNS_MODE}"
+}
+
+cmd="${1:-help}"
+case "${cmd}" in
+  phase1) shift; phase1 "$@" ;;
+  phase2) shift; phase2 "$@" ;;
+  doctor) shift; doctor "$@" ;;
+  version) version ;;
+  help|--help|-h) usage ;;
+  *) err "Unknown command: ${cmd}"; usage; exit 2 ;;
+esac

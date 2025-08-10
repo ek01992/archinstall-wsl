@@ -1,1 +1,8 @@
+# Cursor
 .cursor/
+
+# Local config overrides
+config/local.env
+
+# Backups
+*.bak

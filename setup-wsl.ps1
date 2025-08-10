@@ -25,7 +25,7 @@ $IsTty = $true
 try { $IsTty = -not [Console]::IsOutputRedirected } catch { $IsTty = $false }
 if ($IsTty -and $env:NO_COLOR) { $PSStyle.OutputRendering = 'PlainText' }
 
-# Build theme with resilient muted color selection
+# Muted color detection
 $fgProps = @()
 try { $fgProps = $PSStyle.Foreground.PSObject.Properties.Name } catch { $fgProps = @() }
 $MutedColor =
@@ -43,14 +43,26 @@ $Theme = @{
   Reset  = $PSStyle.Reset
 }
 
+function Get-TuiWidth { try { [Math]::Max(20, [Console]::WindowWidth) } catch { 80 } }
+
+function Get-TuiChars {
+  $isUtf = $true
+  try { $isUtf = [Console]::OutputEncoding.BodyName -match 'utf' } catch { $isUtf = $true }
+  if ($env:UI_ASCII -eq '1' -or -not $isUtf) {
+    return @{ TL='+'; TR='+'; BL='+'; BR='+'; H='-'; V='|' }
+  } else {
+    return @{ TL='┌'; TR='┐'; BL='└'; BR='┘'; H='─'; V='│' }
+  }
+}
+
 function Write-Section {
   param([Parameter(Mandatory)][string]$Title)
-  $w = 80
-  try { $w = [Math]::Max(20, [Console]::WindowWidth) } catch { $w = 80 }
-  $hr = '─' * ([Math]::Max(10, $w - 2))
-  Write-Host "$($Theme.Muted)┌$hr$($Theme.Reset)"
-  Write-Host "$($Theme.Bold)$($Theme.Accent)│ $Title$($Theme.Reset)"
-  Write-Host "$($Theme.Muted)└$hr$($Theme.Reset)"
+  $w = Get-TuiWidth
+  $ch = Get-TuiChars
+  $hr = $ch.H * ([Math]::Max(10, $w - 2))
+  Write-Host "$($Theme.Muted)$($ch.TL)$hr$($ch.TR)$($Theme.Reset)"
+  Write-Host "$($Theme.Bold)$($Theme.Accent)$($ch.V) $Title$($Theme.Reset)"
+  Write-Host "$($Theme.Muted)$($ch.BL)$hr$($ch.BR)$($Theme.Reset)"
 }
 
 function Write-StatusEx {
@@ -85,7 +97,22 @@ function Invoke-Step {
   }
 }
 
-function Prompt-Choice {
+function Show-TuiTable {
+  param([Parameter(Mandatory, ValueFromPipeline)]$InputObject)
+  process {
+    $pairs =
+      if ($InputObject -is [hashtable]) { $InputObject.GetEnumerator() | Sort-Object Name }
+      else { $InputObject.PSObject.Properties | Sort-Object Name }
+    $max = ($pairs | ForEach-Object { $_.Name.Length } | Measure-Object -Maximum).Maximum
+    foreach ($p in $pairs) {
+      $k = $p.Name; $v = $p.Value
+      $fmt = "{0}{1,-" + $max + "}{2} : {3}"
+      Write-Host ($fmt -f $Theme.Muted, $k, $Theme.Reset, $v)
+    }
+  }
+}
+
+function Read-TuiChoice {
   param(
     [Parameter(Mandatory)][string]$Title,
     [Parameter(Mandatory)][string]$Message,
@@ -95,6 +122,12 @@ function Prompt-Choice {
   $cd = foreach ($c in $Choices) { New-Object Management.Automation.Host.ChoiceDescription "&$c", $c }
   $sel = $host.UI.PromptForChoice($Title, $Message, $cd, $DefaultIndex)
   return $Choices[$sel]
+}
+
+function Read-TuiConfirm {
+  param([Parameter(Mandatory)][string]$Message, [switch]$DefaultYes)
+  $choices = @('Yes','No'); $def = if ($DefaultYes) { 0 } else { 1 }
+  (Read-TuiChoice -Title 'Confirm' -Message $Message -Choices $choices -DefaultIndex $def) -eq 'Yes'
 }
 
 # -------------------------------
@@ -332,13 +365,16 @@ function Export-WslSnapshot {
 }
 
 function Show-Preflight {
-  Write-StatusEx -Level Info -Text ("Distro:           {0}" -f $DistroName)
-  Write-StatusEx -Level Info -Text ("Default user:     {0}" -f $DefaultUser)
-  Write-StatusEx -Level Info -Text ("CPUs:             {0}" -f $WSLCPUs)
-  Write-StatusEx -Level Info -Text ("Memory:           {0}" -f $WSLMemory)
-  Write-StatusEx -Level Info -Text ("Swap:             {0}GB" -f $SwapGB)
-  Write-StatusEx -Level Info -Text ("DNS mode:         {0}" -f $DnsMode)
-  Write-StatusEx -Level Info -Text ("Snapshot target:  {0}" -f $snapshotFile)
+  $obj = [pscustomobject]@{
+    Distro         = $DistroName
+    'Default user' = $DefaultUser
+    CPUs           = $WSLCPUs
+    Memory         = $WSLMemory
+    SwapGB         = $SwapGB
+    'DNS mode'     = $DnsMode
+    'Snapshot file'= $snapshotFile
+  }
+  $obj | Show-TuiTable
 }
 
 function Show-Plan {
@@ -354,7 +390,7 @@ function Main {
   Ensure-ExecutionPolicy
 
   if (-not $PSBoundParameters.ContainsKey('DnsMode') -and $IsTty) {
-    $DnsMode = Prompt-Choice -Title "DNS mode" -Message "Select DNS strategy" -Choices @('static','resolved','wsl') -DefaultIndex 0
+    $DnsMode = Read-TuiChoice -Title "DNS mode" -Message "Select DNS strategy" -Choices @('static','resolved','wsl') -DefaultIndex 0
   }
 
   if (-not (Test-WslAvailable)) {

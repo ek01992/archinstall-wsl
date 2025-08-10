@@ -52,43 +52,60 @@ retry() {
 }
 
 # --------------------------------------------
-# TTY-aware UI helpers (colors, sections, spinner)
+# TTY-aware UI helpers (colors, sections, spinner, steps)
 # --------------------------------------------
-if [ -t 1 ] && [ -z "${NO_COLOR:-}" ]; then
+_ui_is_tty() { [ -t 1 ]; }
+_ui_cols() { tput cols 2>/dev/null || printf 80; }
+_ui_utf8() { case "${LANG:-}${LC_ALL:-}${LC_CTYPE:-}" in *UTF-8*|*utf8*) return 0;; *) return 1;; esac; }
+
+# Theme init
+if _ui_is_tty && [ -z "${NO_COLOR:-}" ]; then
   BOLD="$(printf '\033[1m')"; RESET="$(printf '\033[0m')"
   CYAN="$(printf '\033[36m')"; GREEN="$(printf '\033[32m')"
   YELLOW="$(printf '\033[33m')"; RED="$(printf '\033[31m')"
+  MUTED="$(printf '\033[90m')"
 else
-  BOLD=""; RESET=""; CYAN=""; GREEN=""; YELLOW=""; RED=""
+  BOLD=""; RESET=""; CYAN=""; GREEN=""; YELLOW=""; RED=""; MUTED=""
 fi
 
-ui::cols() { tput cols 2>/dev/null || printf 80; }
-ui::hr() { local w; w="$(ui::cols)"; printf '%*s' "$(( w-2 ))" | tr ' ' '─'; }
+# ASCII/Unicode box chars
+if [ -n "${UI_ASCII:-}" ] || ! _ui_utf8; then
+  UI_CHAR_TL="+"; UI_CHAR_TR="+"; UI_CHAR_BL="+"; UI_CHAR_BR="+"; UI_CHAR_H="-"; UI_CHAR_V="|"; UI_LEADER=">"
+else
+  UI_CHAR_TL="┌"; UI_CHAR_TR="┐"; UI_CHAR_BL="└"; UI_CHAR_BR="┘"; UI_CHAR_H="─"; UI_CHAR_V="│"; UI_LEADER="▶"
+fi
+
+# Optional controls
+UI_VERBOSE="${UI_VERBOSE:-0}"   # 0 to keep output terse; 1 to stream
+UI_LOGFILE="${UI_LOGFILE:-}"    # e.g. /tmp/bootstrap.log
+
+ui::cols() { _ui_cols; }
+ui::hr() {
+  local w; w="$(_ui_cols)"
+  local n=$(( w - 2 )); [ "$n" -lt 10 ] && n=10
+  printf '%*s' "$n" | tr ' ' "$UI_CHAR_H"
+}
 
 ui::section() {
-  printf "%b\n" "${CYAN}$(ui::hr)${RESET}"
-  printf "%b\n" "${BOLD}${CYAN}▶ $*${RESET}"
-  printf "%b\n" "${CYAN}$(ui::hr)${RESET}"
+  printf "%b%s%s%b\n" "${MUTED}" "${UI_CHAR_TL}$(ui::hr)${UI_CHAR_TR}" "" "${RESET}"
+  printf "%b%s %s%b\n" "${BOLD}${CYAN}" "${UI_CHAR_V}" "$*" "${RESET}"
+  printf "%b%s%s%b\n" "${MUTED}" "${UI_CHAR_BL}$(ui::hr)${UI_CHAR_BR}" "" "${RESET}"
 }
 ui::info()  { printf "%b\n" "${CYAN}[*]${RESET} $*"; }
 ui::ok()    { printf "%b\n" "${GREEN}[+]${RESET} $*"; }
 ui::warn()  { printf "%b\n" "${YELLOW}[!]${RESET} $*"; }
 ui::err()   { printf "%b\n" "${RED}[x]${RESET} $*"; }
 
-# Spinner: ui::run_with_spinner "Message" cmd args...
-ui::run_with_spinner() {
-  local msg="$1"; shift
-  local spin='-\|/'; local i=0
-  "$@" & local pid=$!
-  while kill -0 "$pid" 2>/dev/null; do
-    i=$(( (i+1) %4 ))
-    printf "\r${CYAN}[%s]${RESET} %s" "${spin:$i:1}" "$msg"
-    sleep 0.1
+# KV table: ui::kv_table "Key" "Val" ...
+ui::kv_table() {
+  local -a pairs=("$@"); local cols=0 i
+  for ((i=0; i<${#pairs[@]}; i+=2)); do
+    local k="${pairs[i]}"; [ "${#k}" -gt "$cols" ] && cols="${#k}"
   done
-  wait "$pid"; local rc=$?
-  printf "\r"
-  if [ $rc -eq 0 ]; then ui::ok "$msg"; else ui::err "$msg (rc=$rc)"; fi
-  return $rc
+  for ((i=0; i<${#pairs[@]}; i+=2)); do
+    local k="${pairs[i]}" v="${pairs[i+1]}"
+    printf "%b  %-*s%b : %s\n" "${MUTED}" "$cols" "$k" "${RESET}" "$v"
+  done
 }
 
 # Choice: gum > fzf > select
@@ -101,6 +118,77 @@ ui::choose() {
   else
     PS3="${prompt}: "; select c in "$@"; do [ -n "${c:-}" ] && printf "%s" "$c" && break; done
   fi
+}
+
+ui::confirm() {
+  local prompt="${1:-Continue?}" default="${2:-y}"
+  local d; d="$(printf "%s" "$default" | tr '[:upper:]' '[:lower:]')"
+  local hint="[y/N]"; [ "$d" = "y" ] && hint="[Y/n]"
+  read -r -p "${prompt} ${hint} " ans || ans=""
+  ans="${ans:-$default}"
+  case "$(printf "%s" "$ans" | tr '[:upper:]' '[:lower:]')" in y|yes) return 0;; *) return 1;; esac
+}
+
+ui::prompt() {
+  local label="$1" def="${2:-}" ans
+  read -r -p "${label} [${def}]: " ans || ans=""
+  printf "%s" "${ans:-$def}"
+}
+
+# Spinner: ui::run_with_spinner "Message" cmd args...
+ui::run_with_spinner() {
+  local msg="$1"; shift
+  local spin='-\|/'; local i=0
+  if [ -n "${UI_LOGFILE:-}" ]; then
+    "$@" >>"$UI_LOGFILE" 2>&1 & local pid=$!
+  else
+    "$@" >/dev/null 2>&1 & local pid=$!
+  fi
+  local start; start="$(date +%s)"
+  while kill -0 "$pid" 2>/dev/null; do
+    i=$(( (i+1) %4 ))
+    printf "\r${CYAN}[%s]${RESET} %s" "${spin:$i:1}" "$msg"
+    sleep 0.1
+  done
+  wait "$pid"; local rc=$?
+  local ts=$(( $(date +%s) - start ))
+  printf "\r"
+  if [ $rc -eq 0 ]; then ui::ok "$msg (${ts}s)"; else ui::err "$msg (rc=$rc, ${ts}s)"; fi
+  return $rc
+}
+
+# Step: streams or spinner+log depending on UI_VERBOSE/UI_LOGFILE
+ui::step() {
+  local title="$1"; shift
+  if [ "${UI_VERBOSE}" = "0" ] && [ -n "${UI_LOGFILE:-}" ]; then
+    ui::run_with_spinner "$title" "$@"
+  else
+    ui::info "$title"
+    local start rc
+    start="$(date +%s)"
+    if [ -n "${UI_LOGFILE:-}" ]; then
+      "$@" 2>&1 | tee -a "$UI_LOGFILE"
+      rc=${PIPESTATUS[0]}
+    else
+      "$@"
+      rc=$?
+    fi
+    local ts=$(( $(date +%s) - start ))
+    if [ $rc -eq 0 ]; then ui::ok "$title (${ts}s)"; else ui::err "$title failed (rc=$rc, ${ts}s)"; fi
+    return $rc
+  fi
+}
+
+# Lightweight, inline progress (optional)
+ui::progress() {
+  local cur="$1" tot="$2" label="${3:-}"
+  local w="$(_ui_cols)" barw=$(( w - 20 )); [ $barw -lt 10 ] && barw=10
+  local pct=0; [ "$tot" -gt 0 ] && pct=$(( cur * 100 / tot ))
+  local filled=$(( barw * pct / 100 ))
+  printf "\r%s %3d%% [" "$label" "$pct"
+  printf "%*s" "$filled" "" | tr ' ' '#'
+  printf "%*s" $(( barw - filled )) ""
+  printf "]"
 }
 
 # Provide sudo fallback when not installed (Phase 1 runs as root).
@@ -644,7 +732,7 @@ finalize_user_toolchains() {
 cleanup_for_snapshot() {
   ui::info "Cleaning caches and logs"
   yes | sudo pacman -Scc --noconfirm >/dev/null 2>&1 || true
-  rm -rf "$HOME/.cache"/* 2>/dev/null || true
+  rm -rf "$HOME/.cache"/* 2>/div/null || true
   sudo rm -rf /var/cache/pacman/pkg/* 2>/dev/null || true
   sudo journalctl --rotate >/dev/null 2>&1 || true
   sudo journalctl --vacuum-time=1s >/dev/null 2>&1 || true
@@ -655,7 +743,14 @@ cleanup_for_snapshot() {
 # --------------------------------------------
 phase1_main() {
   ui::section "Phase 1"
-  ui::info "Config: user=${DEFAULT_USER}, DNS_MODE=${DNS_MODE}, OPTIMIZE_MIRRORS=${OPTIMIZE_MIRRORS}"
+  ui::section "Preflight summary"
+  ui::kv_table \
+    "Default user" "${DEFAULT_USER}" \
+    "DNS mode" "${DNS_MODE}" \
+    "WSL CPUs" "${WSL_CPUS}" \
+    "WSL memory" "${WSL_MEMORY}" \
+    "Optimize mirrors" "${OPTIMIZE_MIRRORS}" \
+    "Repo root (mnt)" "${REPO_ROOT_MNT:-<auto>}"
 
   # Optional interactive DNS selection if requested and in TTY
   if [[ -t 1 && "${PROMPT_DNS_MODE:-0}" = "1" ]]; then
@@ -663,27 +758,27 @@ phase1_main() {
     ui::ok "Selected DNS mode: ${DNS_MODE}"
   fi
 
-  ensure_locale
-  ui::run_with_spinner "Updating system" pacman_quiet_update
-  ui::run_with_spinner "Installing packages" install_packages
-  ensure_user_and_sudo "$DEFAULT_USER"
-  ensure_subids "$DEFAULT_USER"
-  configure_wsl
-  configure_dns
+  ui::step "Ensure locale" ensure_locale
+  ui::step "Updating system" pacman_quiet_update
+  ui::step "Installing packages" install_packages
+  ui::step "Ensuring user and sudo" ensure_user_and_sudo "$DEFAULT_USER"
+  ui::step "Allocating subordinate IDs" ensure_subids "$DEFAULT_USER"
+  ui::step "Write WSL config" configure_wsl
+  ui::step "Configure DNS (${DNS_MODE})" configure_dns
 
-  install_pyenv_for_user "$DEFAULT_USER"
-  install_nvm_for_user "$DEFAULT_USER"
-  install_rustup_for_user "$DEFAULT_USER"
+  ui::step "Setup pyenv for ${DEFAULT_USER}" install_pyenv_for_user "$DEFAULT_USER"
+  ui::step "Setup nvm for ${DEFAULT_USER}" install_nvm_for_user "$DEFAULT_USER"
+  ui::step "Setup rustup for ${DEFAULT_USER}" install_rustup_for_user "$DEFAULT_USER"
 
-  link_dotfiles_for_user "$DEFAULT_USER"
+  ui::step "Link dotfiles for ${DEFAULT_USER}" link_dotfiles_for_user "$DEFAULT_USER"
   ui::ok "Phase 1 complete. Terminate WSL and start a new session for Phase 2."
 }
 
 phase2_main() {
   ui::section "Phase 2"
-  enable_services
-  finalize_user_toolchains "$DEFAULT_USER"
-  cleanup_for_snapshot
+  ui::step "Enable services" enable_services
+  ui::step "Finalize user toolchains" finalize_user_toolchains "$DEFAULT_USER"
+  ui::step "Cleanup for snapshot" cleanup_for_snapshot
   if [ "$DNS_MODE" = "resolved" ]; then
     if command -v resolvectl >/dev/null 2>&1; then
       ui::info "systemd-resolved active. Check: resolvectl status"

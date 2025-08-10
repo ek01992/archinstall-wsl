@@ -58,7 +58,6 @@ if ! command -v sudo >/dev/null 2>&1; then
     if [ "$#" -ge 3 ] && [ "$1" = "-u" ]; then
       shift
       local __sudo_user="$1"; shift
-      # Re-quote arguments to preserve spacing/quoting for su -c
       local __cmd=""
       local __part
       for __part in "$@"; do
@@ -302,18 +301,24 @@ configure_dns() {
 }
 
 # --------------------------------------------
-# User toolchains and dotfiles
+# User toolchains (split by tool) and dotfiles
 # --------------------------------------------
-install_pyenv_nvm_rustup_for_user() {
+
+#######################################
+# Install and initialize pyenv for a user
+# Globals: append_once, ensure_user_rc_files, get_user_home
+# Args: $1 - user name
+# Returns: None
+#######################################
+install_pyenv_for_user() {
   local user="$1"
   local home_dir
   home_dir="$(get_user_home "$user")" || fail "Could not determine home for user '$user'"
 
-  log "*" "Setting up pyenv, nvm, rustup for ${user}"
+  log "*" "Setting up pyenv for ${user}"
 
   ensure_user_rc_files "$user"
 
-  # pyenv
   if [ ! -d "${home_dir}/.pyenv" ]; then
     sudo -u "$user" env -i HOME="$home_dir" PATH="/usr/bin:/bin" bash -lc 'set -e; command -v curl >/dev/null 2>&1; curl -fsSL https://pyenv.run | bash'
   fi
@@ -326,24 +331,61 @@ install_pyenv_nvm_rustup_for_user() {
   append_once '[[ -d $PYENV_ROOT/bin ]] && export PATH="$PYENV_ROOT/bin:$PATH"' "${home_dir}/.profile"
   append_once 'eval "$(pyenv init -)"' "${home_dir}/.profile"
 
-  # nvm
+  sudo chown "$user:$user" "${home_dir}/.bashrc" "${home_dir}/.profile" 2>/dev/null || true
+  sudo chown -R "$user:$user" "${home_dir}/.pyenv" 2>/dev/null || true
+}
+
+#######################################
+# Install and initialize nvm for a user
+# Globals: append_once, ensure_user_rc_files, get_user_home
+# Args: $1 - user name
+# Returns: None
+#######################################
+install_nvm_for_user() {
+  local user="$1"
+  local home_dir
+  home_dir="$(get_user_home "$user")" || fail "Could not determine home for user '$user'"
+
+  log "*" "Setting up nvm for ${user}"
+
+  ensure_user_rc_files "$user"
+
   if [ ! -d "${home_dir}/.nvm" ]; then
     sudo -u "$user" env -i HOME="$home_dir" PATH="/usr/bin:/bin" bash -lc 'set -e; command -v curl >/dev/null 2>&1; curl -fsSL https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.7/install.sh | bash'
   fi
+
   append_once 'export NVM_DIR="$HOME/.nvm"' "${home_dir}/.bashrc"
   append_once '[ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"' "${home_dir}/.bashrc"
   append_once '[ -s "$NVM_DIR/bash_completion" ] && . "$NVM_DIR/bash_completion"' "${home_dir}/.bashrc"
   append_once 'export NVM_DIR="$HOME/.nvm"' "${home_dir}/.profile"
   append_once '[ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"' "${home_dir}/.profile"
 
-  # rustup
+  sudo chown "$user:$user" "${home_dir}/.bashrc" "${home_dir}/.profile" 2>/dev/null || true
+  sudo chown -R "$user:$user" "${home_dir}/.nvm" 2>/dev/null || true
+}
+
+#######################################
+# Install and initialize rustup for a user
+# Globals: append_once, ensure_user_rc_files, get_user_home
+# Args: $1 - user name
+# Returns: None
+#######################################
+install_rustup_for_user() {
+  local user="$1"
+  local home_dir
+  home_dir="$(get_user_home "$user")" || fail "Could not determine home for user '$user'"
+
+  log "*" "Setting up rustup for ${user}"
+
+  ensure_user_rc_files "$user"
+
   if [ ! -x "${home_dir}/.cargo/bin/rustc" ]; then
     sudo -u "$user" env -i HOME="$home_dir" PATH="/usr/bin:/bin" bash -lc 'set -e; command -v curl >/dev/null 2>&1; curl --proto "=https" --tlsv1.2 -fsSL https://sh.rustup.rs | sh -s -- -y'
   fi
   append_once 'export PATH="$HOME/.cargo/bin:$PATH"' "${home_dir}/.bashrc"
 
   sudo chown "$user:$user" "${home_dir}/.bashrc" "${home_dir}/.profile" 2>/dev/null || true
-  sudo chown -R "$user:$user" "${home_dir}/.pyenv" "${home_dir}/.nvm" "${home_dir}/.cargo" 2>/dev/null || true
+  sudo chown -R "$user:$user" "${home_dir}/.cargo" 2>/dev/null || true
 }
 
 link_dotfiles_for_user() {
@@ -368,7 +410,6 @@ link_dotfiles_for_user() {
 
   if [ -n "$dotroot" ] && [ -d "$dotroot" ]; then
     log "*" "Linking dotfiles for ${user} from ${dotroot}"
-    # Create required dirs using absolute paths and correct ownership
     install -d -o "$user" -g "$user" "$home_dir/.config" "$home_dir/.cargo" "$home_dir/.config/nvim"
     safe_link_user "$user" "$dotroot/bash/.bashrc" "$home_dir/.bashrc"
     safe_link_user "$user" "$dotroot/bash/.bash_aliases" "$home_dir/.bash_aliases"
@@ -493,7 +534,12 @@ phase1_main() {
   ensure_subids "$DEFAULT_USER"
   configure_wsl
   configure_dns
-  install_pyenv_nvm_rustup_for_user "$DEFAULT_USER"
+
+  # Split toolchain installers
+  install_pyenv_for_user "$DEFAULT_USER"
+  install_nvm_for_user "$DEFAULT_USER"
+  install_rustup_for_user "$DEFAULT_USER"
+
   link_dotfiles_for_user "$DEFAULT_USER"
   log "+" "Phase 1 complete. Terminate WSL and start a new session for Phase 2."
 }

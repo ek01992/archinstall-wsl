@@ -21,7 +21,7 @@ CHATTR_IMMUTABLE_RESOLV="${CHATTR_IMMUTABLE_RESOLV:-true}"
 
 # Package selections
 BASE_PACKAGES=(
-  base-devel curl git wget unzip zip jq ripgrep fzf tmux htop lsof rsync openssh net-tools
+  base-devel sudo curl git wget unzip zip jq ripgrep fzf tmux htop lsof rsync openssh net-tools
   # Python build deps (ensure ssl, sqlite3, tkinter, etc. are compiled)
   openssl zlib xz tk readline sqlite gdbm libffi bzip2 ncurses
 )

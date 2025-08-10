@@ -139,15 +139,10 @@ ui::hr() {
   printf '%*s' "$n" "" | tr ' ' "$UI_CHAR_H"
 }
 ui::section() { printf "%b%s%s%b\n" "${MUTED}" "${UI_CHAR_TL}$(ui::hr)${UI_CHAR_TR}" "" "${RESET}"; printf "%b%s %s%b\n" "${BOLD}${CYAN}" "${UI_CHAR_V}" "$*" "${RESET}"; printf "%b%s%s%b\n" "${MUTED}" "${UI_CHAR_BL}$(ui::hr)${UI_CHAR_BR}" "" "${RESET}"; }
-ui::info()  { printf "%b\n" "${CYAN}[*]${RESET} $*"; }
-ui::ok()    { printf "%b\n" "${GREEN}[+]${RESET} $*"; }
-ui::warn()  { printf "%b\n" "${YELLOW}[!]${RESET} $*"; }
-ui::err()   { printf "%b\n" "${RED}[x]${RESET} $*"; }
-# Fix SC2086: quote $*
-ui::info()  { printf "%b\n" "${CYAN}[*]${RESET} $*"; }
-ui::ok()    { printf "%b\n" "${GREEN}[+]${RESET} $*"; }
-ui::warn()  { printf "%b\n" "${YELLOW}[!]${RESET} $*"; }
-ui::err()   { printf "%b\n" "${RED}[x]${RESET} $*"; }
+ui::info()  { printf "%b %s\n" "${CYAN}[*]${RESET}" "$*"; }
+ui::ok()    { printf "%b %s\n" "${GREEN}[+]${RESET}" "$*"; }
+ui::warn()  { printf "%b %s\n" "${YELLOW}[!]${RESET}" "$*"; }
+ui::err()   { printf "%b %s\n" "${RED}[x]${RESET}" "$*"; }
 
 ui::run_with_spinner() {
   local msg="$1"; shift
@@ -156,8 +151,8 @@ ui::run_with_spinner() {
   local start; start="$(date +%s)"
   while kill -0 "$pid" 2>/dev/null; do i=$(( (i+1) %4 )); printf "\r${CYAN}[%s]${RESET} %s" "${spin:$i:1}" "$msg"; sleep 0.1; done
   wait "$pid"; local rc=$?; local ts=$(( $(date +%s) - start )); printf "\r"
-  if [ $rc -eq 0 ]; then ui::ok "$msg (${ts}s)"; else ui::err "$msg (rc=$rc, ${ts}s)"; fi
-  return $rc
+  if [ "$rc" -eq 0 ]; then ui::ok "$msg (${ts}s)"; else ui::err "$msg (rc=$rc, ${ts}s)"; fi
+  return "$rc"
 }
 
 ui::step() {
@@ -167,8 +162,8 @@ ui::step() {
     ui::info "$title"; local start rc; start="$(date +%s)"
     if [ -n "${UI_LOGFILE:-}" ]; then "$@" 2>&1 | tee -a "$UI_LOGFILE"; rc=${PIPESTATUS[0]}; else "$@"; rc=$?; fi
     local ts=$(( $(date +%s) - start ))
-    if [ $rc -eq 0 ]; then ui::ok "$title (${ts}s)"; else ui::err "$title failed (rc=$rc, ${ts}s)"; fi
-    return $rc
+    if [ "$rc" -eq 0 ]; then ui::ok "$title (${ts}s)"; else ui::err "$title failed (rc=$rc, ${ts}s)"; fi
+    return "$rc"
   fi
 }
 
@@ -208,7 +203,7 @@ safe_link_user() {
 get_user_home() {
   local user="$1"
   local hd; hd="$(getent passwd "$user" | cut -d: -f6 || true)"
-  if [ -z "${hd:-}" ]; then hd="$(su -s /bin/bash - "$user" -c 'printf %s "$HOME"' 2>/dev/null || true)"; fi
+  if [ -z "${hd:-}" ]; then hd="$(su -s /bin/bash - "$user" -c "printf %s '$HOME'" 2>/dev/null || true)"; fi
   [ -n "${hd:-}" ] && printf '%s\n' "$hd" || return 1
 }
 
@@ -471,7 +466,7 @@ detect_dotfiles_root() {
     root="${REPO_ROOT_MNT}/dotfiles"
   else
     if command -v powershell.exe >/dev/null 2>&1; then
-      local win_cwd; win_cwd="$(powershell.exe -NoProfile -Command '$pwd.Path' | tr -d '\r')"
+      local win_cwd; win_cwd="$(powershell.exe -NoProfile -Command "\$pwd.Path" | tr -d '\r')"
       if [ -n "$win_cwd" ]; then
         local repo_root; repo_root="$(wslpath -u "$win_cwd")"
         [ -d "${repo_root}/dotfiles" ] && root="${repo_root}/dotfiles"

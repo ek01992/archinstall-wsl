@@ -1,4 +1,3 @@
-# setup-wsl.ps1
 [CmdletBinding(SupportsShouldProcess = $true, ConfirmImpact = 'Medium')]
 param(
     [switch]$Force,
@@ -247,7 +246,6 @@ Set-Alias -Name Convert-ToLF -Value ConvertTo-Lf -Scope Local -ErrorAction Silen
 function ConvertTo-BootstrapLf { return (ConvertTo-Lf -Path $bootstrapLocal) }
 
 function Invoke-WslChecked {
-  [CmdletBinding(SupportsShouldProcess=$true)]
   param([Parameter(Mandatory)][string[]]$ArgList, [Parameter(Mandatory)][string]$ErrorContext)
   & wsl.exe @ArgList
   if ($LASTEXITCODE -ne 0) { throw "$ErrorContext failed with exit code $LASTEXITCODE" }

@@ -41,7 +41,7 @@ retry() {
   local tries="$1" delay="$2"; shift 2
   local n=1
   until "$@"; do
-    if (( n >= tries  )); then
+    if (( n >= tries )); then
       return 1
     fi
     sleep "$delay"
@@ -303,7 +303,6 @@ install_pyenv_nvm_rustup_for_user() {
 
   log "*" "Setting up pyenv, nvm, rustup for ${user}"
 
-  # Ensure shell rc files exist and are owned by the user BEFORE installers amend them
   ensure_user_rc_files "$user"
 
   # pyenv
@@ -311,7 +310,6 @@ install_pyenv_nvm_rustup_for_user() {
     sudo -u "$user" env -i HOME="$home_dir" PATH="/usr/bin:/bin" bash -lc 'set -e; command -v curl >/dev/null 2>&1; curl -fsSL https://pyenv.run | bash'
   fi
 
-  # Ensure shells load pyenv
   append_once 'export PYENV_ROOT="$HOME/.pyenv"' "${home_dir}/.bashrc"
   append_once '[[ -d $PYENV_ROOT/bin ]] && export PATH="$PYENV_ROOT/bin:$PATH"' "${home_dir}/.bashrc"
   append_once 'eval "$(pyenv init -)"' "${home_dir}/.bashrc"
@@ -336,7 +334,6 @@ install_pyenv_nvm_rustup_for_user() {
   fi
   append_once 'export PATH="$HOME/.cargo/bin:$PATH"' "${home_dir}/.bashrc"
 
-  # Make sure ownership is correct for future edits
   sudo chown "$user:$user" "${home_dir}/.bashrc" "${home_dir}/.profile" 2>/dev/null || true
   sudo chown -R "$user:$user" "${home_dir}/.pyenv" "${home_dir}/.nvm" "${home_dir}/.cargo" 2>/dev/null || true
 }
@@ -363,7 +360,8 @@ link_dotfiles_for_user() {
 
   if [ -n "$dotroot" ] && [ -d "$dotroot" ]; then
     log "*" "Linking dotfiles for ${user} from ${dotroot}"
-    sudo -u "$user" bash -lc "mkdir -p \"$HOME/.config\" \"$HOME/.cargo\" \"$HOME/.config/nvim\""
+    # Create required dirs using absolute paths and correct ownership
+    install -d -o "$user" -g "$user" "$home_dir/.config" "$home_dir/.cargo" "$home_dir/.config/nvim"
     safe_link_user "$user" "$dotroot/bash/.bashrc" "$home_dir/.bashrc"
     safe_link_user "$user" "$dotroot/bash/.bash_aliases" "$home_dir/.bash_aliases"
     safe_link_user "$user" "$dotroot/git/.gitconfig" "$home_dir/.gitconfig"
@@ -409,7 +407,6 @@ finalize_user_toolchains() {
 
   log "*" "Finalizing toolchains for ${user} (Node LTS, Python ${PY_VER}, pip upgrade, rust components)"
 
-  # nvm + Node LTS
   sudo -u "$user" bash -lc '
     set -e
     [ -f "$HOME/.profile" ] && . "$HOME/.profile"
@@ -420,7 +417,6 @@ finalize_user_toolchains() {
     nvm alias default lts/*
   '
 
-  # pyenv + Python
   sudo -u "$user" bash -lc "
     set -e
     [ -f \"\$HOME/.profile\" ] && . \"\$HOME/.profile\"
@@ -437,7 +433,6 @@ finalize_user_toolchains() {
     fi
   "
 
-  # rustup components
   sudo -u "$user" bash -lc '
     set -e
     [ -f "$HOME/.profile" ] && . "$HOME/.profile"
@@ -448,7 +443,6 @@ finalize_user_toolchains() {
     rustup component add rustfmt clippy || true
   '
 
-  # Podman basic smoke test (best-effort)
   sudo -u "$user" bash -lc '
     set -e
     if command -v podman >/dev/null 2>&1; then
@@ -457,7 +451,6 @@ finalize_user_toolchains() {
     fi
   '
 
-  # Versions summary
   sudo -u "$user" bash -lc '
     set -e
     [ -f "$HOME/.profile" ] && . "$HOME/.profile"
@@ -466,9 +459,9 @@ finalize_user_toolchains() {
     export PYENV_ROOT="$HOME/.pyenv"; [ -d "$PYENV_ROOT/bin" ] && export PATH="$PYENV_ROOT/bin:$PATH"; command -v pyenv >/dev/null 2>&1 && eval "$(pyenv init -)"
     export PATH="$HOME/.cargo/bin:$PATH"
     echo "[*] Versions summary:"
-    command -v node   >/dev/null 2>&1 && echo "  node: $(node -v)" || true
+    command -v node >/dev/null 2>&1 && echo "  node: $(node -v)" || true
     command -v python >/dev/null 2>&1 && echo "  python: $(python -V 2>&1)" || true
-    command -v rustc  >/dev/null 2>&1 && echo "  rustc: $(rustc -V 2>/dev/null)" || true
+    command -v rustc >/dev/null 2>&1 && echo "  rustc: $(rustc -V 2>/dev/null)" || true
     command -v podman >/dev/null 2>&1 && echo "  podman: $(podman --version 2>/dev/null)" || true
   '
 }

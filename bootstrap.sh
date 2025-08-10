@@ -38,6 +38,8 @@ ENABLE_CONTAINER_PKGS="${ENABLE_CONTAINER_PKGS:-true}"
 ENABLE_OPTIONAL_LANG_PACKAGES="${ENABLE_OPTIONAL_LANG_PACKAGES:-true}"
 ENABLE_OPTIONAL_DOTFILES_HELPERS="${ENABLE_OPTIONAL_DOTFILES_HELPERS:-true}"
 ENABLE_PYENV="${ENABLE_PYENV:-true}"
+ENABLE_PYENV_VIRTUALENV="${ENABLE_PYENV_VIRTUALENV:-true}"
+PYENV_VIRTUALENV_TAG="${PYENV_VIRTUALENV_TAG:-}"
 ENABLE_NVM="${ENABLE_NVM:-true}"
 ENABLE_RUSTUP="${ENABLE_RUSTUP:-true}"
 ENABLE_LINK_DOTFILES="${ENABLE_LINK_DOTFILES:-true}"
@@ -404,13 +406,26 @@ install_pyenv_for_user() {
       git checkout ${PYENV_VERSION_TAG}
     "
   fi
+  if [ "${ENABLE_PYENV_VIRTUALENV}" = "true" ]; then
+    sudo -u "$user" env -i HOME="$home_dir" PATH="/usr/bin:/bin" bash -lc "
+      set -euo pipefail
+      if [ ! -d \"\$HOME/.pyenv/plugins/pyenv-virtualenv\" ]; then
+        git clone https://github.com/pyenv/pyenv-virtualenv.git \"\$HOME/.pyenv/plugins/pyenv-virtualenv\"
+        if [ -n \"${PYENV_VIRTUALENV_TAG}\" ]; then
+          cd \"\$HOME/.pyenv/plugins/pyenv-virtualenv\" && git checkout \"${PYENV_VIRTUALENV_TAG}\" || true
+        fi
+      fi
+    "
+  fi
+
   append_once 'export PYENV_ROOT="$HOME/.pyenv"' "${home_dir}/.bashrc"
   append_once '[[ -d $PYENV_ROOT/bin ]] && export PATH="$PYENV_ROOT/bin:$PATH"' "${home_dir}/.bashrc"
   append_once 'eval "$(pyenv init -)"' "${home_dir}/.bashrc"
-  append_once 'eval "$(pyenv virtualenv-init -)"' "${home_dir}/.bashrc"
+  append_once '[ -d "$HOME/.pyenv/plugins/pyenv-virtualenv" ] && eval "$(pyenv virtualenv-init -)"' "${home_dir}/.bashrc"
   append_once 'export PYENV_ROOT="$HOME/.pyenv"' "${home_dir}/.profile"
   append_once '[[ -d $PYENV_ROOT/bin ]] && export PATH="$PYENV_ROOT/bin:$PATH"' "${home_dir}/.profile"
   append_once 'eval "$(pyenv init -)"' "${home_dir}/.profile"
+
   sudo chown "$user:$user" "${home_dir}/.bashrc" "${home_dir}/.profile" 2>/dev/null || true
   sudo chown -R "$user:$user" "${home_dir}/.pyenv" 2>/dev/null || true
 }

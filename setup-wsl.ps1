@@ -1,4 +1,3 @@
-# setup-wsl.ps1
 [CmdletBinding(SupportsShouldProcess = $true, ConfirmImpact = 'Medium')]
 param(
     [switch]$Force,

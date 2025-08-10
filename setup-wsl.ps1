@@ -162,7 +162,12 @@ function Initialize-WslDistribution { param([Parameter(Mandatory)][string]$Name,
 function Resolve-DistroName { param([string]$Requested); $online = (& wsl.exe --list --online 2>$null) -join "`n"; if ($LASTEXITCODE -ne 0 -or -not $online) { return $Requested }; if ($online -match 'Arch Linux') { return 'Arch Linux' }; return $Requested }
 
 # ---- Pass-through env to WSL phases (declarative control) ----
-function Escape-BashSingleQuoted { param([string]$s) if ($null -eq $s) { return '' } return ($s -replace "'", "'\"'\"'") }
+function Escape-BashSingleQuoted {
+  param([string]$s)
+  if ($null -eq $s) { return '' }
+  # Replace single quotes with the bash-safe sequence: '"'"'
+  return ($s -replace "'", "'""'""'")
+}
 function Build-EnvAssignments {
   param([string[]]$Names)
   $sb = New-Object System.Text.StringBuilder

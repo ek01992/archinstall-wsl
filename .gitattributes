@@ -1,0 +1,8 @@
+# Enforce LF on scripts used by Linux
+*.sh text eol=lf
+*.bash text eol=lf
+*.bats text eol=lf
+# Keep PowerShell in CRLF on Windows
+*.ps1 text eol=crlf
+# Markdown as LF
+*.md text eol=lf

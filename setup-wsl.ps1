@@ -92,6 +92,14 @@ function Wait-ForDistro {
   return $false
 }
 
+function Invoke-WSLChecked {
+  param([string]$Arguments, [string]$ErrorContext)
+  & wsl.exe $Arguments
+  if ($LASTEXITCODE -ne 0) {
+    throw "$ErrorContext failed with exit code $LASTEXITCODE"
+  }
+}
+
 Write-Preflight
 Set-WSLDefault
 Write-WslConfigSafe
@@ -129,9 +137,14 @@ if (-not (Wait-ForDistro -Name $DistroName -TimeoutSec 120)) {
   throw "Distro '$DistroName' did not appear after install."
 }
 
-# Prepare bootstrap path in /mnt/ form
-Copy-Item $bootstrapLocal (Join-Path $env:TEMP "bootstrap-arch-wsl.sh") -Force
+# Prepare bootstrap path with normalized LF endings to avoid /usr/bin/env bash\r errors
 $tempBootstrap = Join-Path $env:TEMP "bootstrap-arch-wsl.sh"
+# Normalize CRLF -> LF and write UTF-8 without BOM
+$text = Get-Content -Raw -Encoding UTF8 $bootstrapLocal
+$text = $text -replace "`r`n","`n"
+$text = $text -replace "`r","`n"
+Set-Content -Path $tempBootstrap -Value $text -NoNewline -Encoding utf8NoBOM
+Write-Host "[*] Prepared $tempBootstrap (LF line endings)."
 
 # Guard UNC paths (\\server\share\...) which WSL /mnt mapping cannot construct
 if ($tempBootstrap.StartsWith("\\") -or $repoRoot.StartsWith("\\")) {
@@ -148,15 +161,14 @@ Write-Host "    - Phase 2: enable services and finalize toolchains"
 Write-Host ""
 
 Write-Host "[*] Running Phase 1 inside WSL as root..."
-& wsl.exe -d $DistroName -u root -- bash -lc "chmod +x '$mntPath' && DEFAULT_USER='$DefaultUser' WSL_MEMORY='$WSLMemory' WSL_CPUS='$WSLCPUs' REPO_ROOT_MNT='$mntRepoRoot' DNS_MODE='$DnsMode' '$mntPath' phase1"
+Invoke-WSLChecked "-d $DistroName -u root -- bash -lc ""chmod +x '$mntPath' && DEFAULT_USER='$DefaultUser' WSL_MEMORY='$WSLMemory' WSL_CPUS='$WSLCPUs' REPO_ROOT_MNT='$mntRepoRoot' DNS_MODE='$DnsMode' '$mntPath' phase1""" "Phase 1"
 
 Write-Host "[*] Shutting down WSL to activate systemd and default user..."
 & wsl.exe --shutdown
 
 Write-Host "[*] Running Phase 2 inside WSL..."
-# Defensive: verify systemd is actually PID1
 $phase2Cmd = "DEFAULT_USER='$DefaultUser' DNS_MODE='$DnsMode' '$mntPath' phase2"
-& wsl.exe -d $DistroName -u root -- bash -lc "$phase2Cmd"
+Invoke-WSLChecked "-d $DistroName -u root -- bash -lc ""$phase2Cmd""" "Phase 2"
 
 Write-Host "[*] Terminating distro before export..."
 & wsl.exe --terminate $DistroName

@@ -27,12 +27,20 @@ $IsTty = $true
 try { $IsTty = -not [Console]::IsOutputRedirected } catch { $IsTty = $false }
 if ($IsTty -and $env:NO_COLOR) { $PSStyle.OutputRendering = 'PlainText' }
 
+# Build theme with resilient muted color selection
+$fgProps = @()
+try { $fgProps = $PSStyle.Foreground.PSObject.Properties.Name } catch { $fgProps = @() }
+$MutedColor =
+  if ($fgProps -contains 'BrightBlack') { $PSStyle.Foreground.BrightBlack }
+  elseif ($fgProps -contains 'DarkGray') { $PSStyle.Foreground.DarkGray }
+  else { '' }
+
 $Theme = @{
   Accent = $PSStyle.Foreground.Cyan
   Good   = $PSStyle.Foreground.Green
   Warn   = $PSStyle.Foreground.Yellow
   Bad    = $PSStyle.Foreground.Red
-  Muted  = $PSStyle.Foreground.DarkGray
+  Muted  = $MutedColor
   Bold   = $PSStyle.Bold
   Reset  = $PSStyle.Reset
 }
@@ -175,7 +183,6 @@ function Set-FileContentIfChanged {
   )
   $shouldWrite = $true
   if (Test-Path $Path) {
-    # Use .NET to read raw bytes reliably across PS versions (see PURE-03 rationale).
     [byte[]]$existing = [System.IO.File]::ReadAllBytes($Path)
     $newBytes = [System.Text.Encoding]::GetEncoding($Encoding).GetBytes($NewContent)
     $areEqual = [System.Linq.Enumerable]::SequenceEqual($existing, $newBytes)
@@ -216,7 +223,6 @@ function ConvertTo-Lf {
   Write-StatusEx -Level Ok -Text "Prepared $temp (LF line endings)."
   return $temp
 }
-# Back-compat alias if referenced elsewhere
 Set-Alias -Name Convert-ToLF -Value ConvertTo-Lf -Scope Local -ErrorAction SilentlyContinue
 
 function Prepare-BootstrapScript {
@@ -276,7 +282,6 @@ function Ensure-WslDistributionPresent {
   Install-WslDistributionNoLaunch -Name $Name
 }
 
-# Preferred name using approved verbs; keep wrapper above for back-compat
 function Initialize-WslDistribution {
   param(
     [Parameter(Mandatory)][string]$Name,
@@ -350,7 +355,6 @@ function Main {
   Show-Preflight
   Ensure-ExecutionPolicy
 
-  # Optional interactive DNS selection if not explicitly bound and in TTY
   if (-not $PSBoundParameters.ContainsKey('DnsMode') -and $IsTty) {
     $DnsMode = Prompt-Choice -Title "DNS mode" -Message "Select DNS strategy" -Choices @('static','resolved','wsl') -DefaultIndex 0
   }
@@ -373,7 +377,6 @@ function Main {
   Write-Section "Plan"
   Show-Plan
 
-  # Prepare bootstrap script with LF endings and map to /mnt path
   $tempBootstrap = Prepare-BootstrapScript
   if ($tempBootstrap.StartsWith("\\") -or $repoRoot.StartsWith("\\")) {
     throw "Repository or temp path is a UNC path. Please use a local drive path for correct /mnt mapping."

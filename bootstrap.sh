@@ -732,7 +732,7 @@ finalize_user_toolchains() {
 cleanup_for_snapshot() {
   ui::info "Cleaning caches and logs"
   yes | sudo pacman -Scc --noconfirm >/dev/null 2>&1 || true
-  rm -rf "$HOME/.cache"/* 2>/div/null || true
+  rm -rf "$HOME/.cache"/* 2>/dev/null || true
   sudo rm -rf /var/cache/pacman/pkg/* 2>/dev/null || true
   sudo journalctl --rotate >/dev/null 2>&1 || true
   sudo journalctl --vacuum-time=1s >/dev/null 2>&1 || true

@@ -1,3 +1,4 @@
+# setup-wsl.ps1
 [CmdletBinding(SupportsShouldProcess = $true, ConfirmImpact = 'Medium')]
 param(
     [switch]$Force,
@@ -146,8 +147,9 @@ function Get-TextEncoding {
   }
 }
 
-[CmdletBinding(SupportsShouldProcess=$true)]
 function Set-ExecutionPolicyIfNeeded {
+  [CmdletBinding(SupportsShouldProcess=$true)]
+  param()
   try {
     $scope = 'CurrentUser'
     $policy = Get-ExecutionPolicy -Scope $scope -ErrorAction SilentlyContinue
@@ -163,8 +165,9 @@ function Set-ExecutionPolicyIfNeeded {
 
 function Test-WslAvailable { & wsl.exe --status *> $null; return ($LASTEXITCODE -eq 0) }
 
-[CmdletBinding(SupportsShouldProcess=$true)]
 function Set-WslDefaultVersion2 {
+  [CmdletBinding(SupportsShouldProcess=$true)]
+  param()
   if ($PSCmdlet.ShouldProcess("WSL default version", "Set to 2")) {
     try { $null = & wsl.exe --set-default-version 2 } catch { }
     Write-StatusEx -Level Info -Text "WSL default version set to 2."
@@ -185,8 +188,8 @@ localhostForwarding=true
 "@
 }
 
-[CmdletBinding(SupportsShouldProcess=$true)]
 function Set-FileContentIfChanged {
+  [CmdletBinding(SupportsShouldProcess=$true)]
   param(
     [Parameter(Mandatory)][string]$Path,
     [Parameter(Mandatory)][string]$NewContent,
@@ -243,15 +246,15 @@ Set-Alias -Name Convert-ToLF -Value ConvertTo-Lf -Scope Local -ErrorAction Silen
 
 function ConvertTo-BootstrapLf { return (ConvertTo-Lf -Path $bootstrapLocal) }
 
-[CmdletBinding(SupportsShouldProcess=$true)]
 function Invoke-WslChecked {
+  [CmdletBinding(SupportsShouldProcess=$true)]
   param([Parameter(Mandatory)][string[]]$ArgList, [Parameter(Mandatory)][string]$ErrorContext)
   & wsl.exe @ArgList
   if ($LASTEXITCODE -ne 0) { throw "$ErrorContext failed with exit code $LASTEXITCODE" }
 }
 
-[CmdletBinding(SupportsShouldProcess=$true)]
 function Remove-WslDistribution {
+  [CmdletBinding(SupportsShouldProcess=$true)]
   param([Parameter(Mandatory)][string]$Name)
   if ($PSCmdlet.ShouldProcess("WSL distro '$Name'", "Unregister")) {
     Write-StatusEx -Level Warn -Text "Unregistering '$Name'..."
@@ -260,8 +263,8 @@ function Remove-WslDistribution {
   }
 }
 
-[CmdletBinding(SupportsShouldProcess=$true)]
 function Install-WslDistributionNoLaunch {
+  [CmdletBinding(SupportsShouldProcess=$true)]
   param([Parameter(Mandatory)][string]$Name)
   if ($PSCmdlet.ShouldProcess("WSL distro '$Name'", "Install --no-launch")) {
     Write-StatusEx -Level Info -Text "Installing '$Name'..."
@@ -270,8 +273,8 @@ function Install-WslDistributionNoLaunch {
   }
 }
 
-[CmdletBinding()]
 function Install-WslDistributionIfNeeded {
+  [CmdletBinding()]
   param(
     [Parameter(Mandatory)][string]$Name,
     [switch]$ForceReinstall
@@ -357,8 +360,8 @@ function New-PhaseCommand {
   }
 }
 
-[CmdletBinding(SupportsShouldProcess=$true)]
 function Invoke-WslPhase {
+  [CmdletBinding(SupportsShouldProcess=$true)]
   param(
     [Parameter(Mandatory)][ValidateSet('phase1','phase2')] [string]$Phase,
     [Parameter(Mandatory)][string]$MntBootstrap,
@@ -371,11 +374,15 @@ function Invoke-WslPhase {
   }
 }
 
-[CmdletBinding(SupportsShouldProcess=$true)]
-function Restart-Wsl { if ($PSCmdlet.ShouldProcess("WSL", "Shutdown")) { & wsl.exe --shutdown } }
+function Restart-Wsl {
+  [CmdletBinding(SupportsShouldProcess=$true)]
+  param()
+  if ($PSCmdlet.ShouldProcess("WSL", "Shutdown")) { & wsl.exe --shutdown }
+}
 
-[CmdletBinding(SupportsShouldProcess=$true)]
 function Export-WslSnapshot {
+  [CmdletBinding(SupportsShouldProcess=$true)]
+  param()
   if ($PSCmdlet.ShouldProcess("WSL '$DistroName'", "Terminate before export")) { & wsl.exe --terminate $DistroName }
   if ($PSCmdlet.ShouldProcess("WSL '$DistroName'", "Export to $snapshotFile")) {
     Write-StatusEx -Level Info -Text "Exporting clean snapshot (warnings about sockets are harmless)..."
@@ -403,7 +410,6 @@ function Show-Plan {
   Write-Host ""
 }
 
-[Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseDeclaredVarsMoreThanAssignments','', Justification='DnsMode is used in UI and passed to WSL via New-PhaseCommand')]
 function Main {
   $DistroName = Resolve-DistroName -Requested $DistroName
 
@@ -413,6 +419,7 @@ function Main {
 
   if (-not $PSBoundParameters.ContainsKey('DnsMode') -and $IsTty) {
     $DnsMode = Read-TuiChoice -Title "DNS mode" -Message "Select DNS strategy" -Choices @('static','resolved','wsl') -DefaultIndex 0
+    Write-StatusEx -Level Info -Text "DNS mode selected: $DnsMode"
   }
 
   if (-not (Test-WslAvailable)) { throw "WSL is not installed or not available. Install WSL and WSL2 first." }

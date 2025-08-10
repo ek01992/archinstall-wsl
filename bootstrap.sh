@@ -143,12 +143,11 @@ ui::info()  { printf "%b\n" "${CYAN}[*]${RESET} $*"; }
 ui::ok()    { printf "%b\n" "${GREEN}[+]${RESET} $*"; }
 ui::warn()  { printf "%b\n" "${YELLOW}[!]${RESET} $*"; }
 ui::err()   { printf "%b\n" "${RED}[x]${RESET} $*"; }
-
-ui::kv_table() {
-  local -a pairs=("$@"); local cols=0 i
-  for ((i=0; i<${#pairs[@]}; i+=2)); do local k="${pairs[i]}"; [ "${#k}" -gt "$cols" ] && cols="${#k}"; done
-  for ((i=0; i<${#pairs[@]}; i+=2)); do local k="${pairs[i]}" v="${pairs[i+1]}"; printf "%b  %-*s%b : %s\n" "${MUTED}" "$cols" "$k" "${RESET}" "$v"; done
-}
+# Fix SC2086: quote $*
+ui::info()  { printf "%b\n" "${CYAN}[*]${RESET} $*"; }
+ui::ok()    { printf "%b\n" "${GREEN}[+]${RESET} $*"; }
+ui::warn()  { printf "%b\n" "${YELLOW}[!]${RESET} $*"; }
+ui::err()   { printf "%b\n" "${RED}[x]${RESET} $*"; }
 
 ui::run_with_spinner() {
   local msg="$1"; shift
@@ -226,8 +225,10 @@ generate_locale() { ui::info "Generating locales"; sudo locale-gen; }
 persist_locale_env() {
   ui::info "Persisting locale environment"
   echo 'LANG=en_US.UTF-8' | sudo tee /etc/locale.conf >/dev/null
+  # shellcheck disable=SC2016
   append_once 'LANG=en_US.UTF-8' /etc/environment
   export LANG=en_US.UTF-8
+  # shellcheck disable=SC2016
   append_once 'export LANG=en_US.UTF-8' /root/.bashrc
 }
 ensure_locale() { configure_locale_gen; generate_locale; persist_locale_env; }
@@ -585,6 +586,7 @@ finalize_podman() {
 
 finalize_node_if_nvm_present() {
   local user="$1"
+  # shellcheck disable=SC2016
   sudo -u "$user" bash -lc "
     set -e
     [ -f \"\$HOME/.profile\" ] && . \"\$HOME/.profile\"
@@ -604,6 +606,7 @@ finalize_node_if_nvm_present() {
 
 print_versions_summary() {
   local user="$1"
+  # shellcheck disable=SC2016
   sudo -u "$user" bash -lc '
     set -e
     [ -f "$HOME/.profile" ] && . "$HOME/.profile"

@@ -25,7 +25,6 @@ $IsTty = $true
 try { $IsTty = -not [Console]::IsOutputRedirected } catch { $IsTty = $false }
 if ($IsTty -and $env:NO_COLOR) { $PSStyle.OutputRendering = 'PlainText' }
 
-# Muted color detection
 $fgProps = @()
 try { $fgProps = $PSStyle.Foreground.PSObject.Properties.Name } catch { $fgProps = @() }
 $MutedColor =
@@ -44,91 +43,21 @@ $Theme = @{
 }
 
 function Get-TuiWidth { try { [Math]::Max(20, [Console]::WindowWidth) } catch { 80 } }
-
 function Get-TuiChars {
   $isUtf = $true
   try { $isUtf = [Console]::OutputEncoding.BodyName -match 'utf' } catch { $isUtf = $true }
   if ($env:UI_ASCII -eq '1' -or -not $isUtf) {
-    return @{ TL='+'; TR='+'; BL='+'; BR='+'; H='-'; V='|' }
+    return @{ TL='+'; TR='+'; BL='+'; BR='+'; H='-'; V='|'' }
   } else {
     return @{ TL='┌'; TR='┐'; BL='└'; BR='┘'; H='─'; V='│' }
   }
 }
-
-function Write-Section {
-  param([Parameter(Mandatory)][string]$Title)
-  $w = Get-TuiWidth
-  $ch = Get-TuiChars
-  $hr = $ch.H * ([Math]::Max(10, $w - 2))
-  Write-Host "$($Theme.Muted)$($ch.TL)$hr$($ch.TR)$($Theme.Reset)"
-  Write-Host "$($Theme.Bold)$($Theme.Accent)$($ch.V) $Title$($Theme.Reset)"
-  Write-Host "$($Theme.Muted)$($ch.BL)$hr$($ch.BR)$($Theme.Reset)"
-}
-
-function Write-StatusEx {
-  param(
-    [Parameter(Mandatory)][ValidateSet('Info','Ok','Warn','Error')]$Level,
-    [Parameter(Mandatory)][string]$Text
-  )
-  switch ($Level) {
-    'Info'  { Write-Host "$($Theme.Accent)[*]$($Theme.Reset) $Text" }
-    'Ok'    { Write-Host "$($Theme.Good)[+]$($Theme.Reset) $Text" }
-    'Warn'  { Write-Host "$($Theme.Warn)[!]$($Theme.Reset) $Text" }
-    'Error' { Write-Host "$($Theme.Bad)[x]$($Theme.Reset) $Text" }
-  }
-}
-
-function Invoke-Step {
-  [CmdletBinding()]
-  param([Parameter(Mandatory)][string]$Activity, [Parameter(Mandatory)][scriptblock]$Script)
-  $id = (Get-Random -Minimum 1000 -Maximum 9999)
-  $sw = [Diagnostics.Stopwatch]::StartNew()
-  Write-Progress -Id $id -Activity $Activity -Status 'Working...' -PercentComplete 0
-  try {
-    & $Script
-    $sw.Stop()
-    Write-Progress -Id $id -Completed -Activity $Activity
-    Write-StatusEx -Level Ok -Text "$Activity ($([int]$sw.Elapsed.TotalSeconds)s)"
-  } catch {
-    $sw.Stop()
-    Write-Progress -Id $id -Completed -Activity $Activity
-    Write-StatusEx -Level Error -Text "$Activity failed: $($_.Exception.Message)"
-    throw
-  }
-}
-
-function Show-TuiTable {
-  param([Parameter(Mandatory, ValueFromPipeline)]$InputObject)
-  process {
-    $pairs =
-      if ($InputObject -is [hashtable]) { $InputObject.GetEnumerator() | Sort-Object Name }
-      else { $InputObject.PSObject.Properties | Sort-Object Name }
-    $max = ($pairs | ForEach-Object { $_.Name.Length } | Measure-Object -Maximum).Maximum
-    foreach ($p in $pairs) {
-      $k = $p.Name; $v = $p.Value
-      $fmt = "{0}{1,-" + $max + "}{2} : {3}"
-      Write-Host ($fmt -f $Theme.Muted, $k, $Theme.Reset, $v)
-    }
-  }
-}
-
-function Read-TuiChoice {
-  param(
-    [Parameter(Mandatory)][string]$Title,
-    [Parameter(Mandatory)][string]$Message,
-    [Parameter(Mandatory)][string[]]$Choices,
-    [int]$DefaultIndex = 0
-  )
-  $cd = foreach ($c in $Choices) { New-Object Management.Automation.Host.ChoiceDescription "&$c", $c }
-  $sel = $host.UI.PromptForChoice($Title, $Message, $cd, $DefaultIndex)
-  return $Choices[$sel]
-}
-
-function Read-TuiConfirm {
-  param([Parameter(Mandatory)][string]$Message, [switch]$DefaultYes)
-  $choices = @('Yes','No'); $def = if ($DefaultYes) { 0 } else { 1 }
-  (Read-TuiChoice -Title 'Confirm' -Message $Message -Choices $choices -DefaultIndex $def) -eq 'Yes'
-}
+function Write-Section { param([Parameter(Mandatory)][string]$Title); $w = Get-TuiWidth; $ch = Get-TuiChars; $hr = $ch.H * ([Math]::Max(10, $w - 2)); Write-Host "$($Theme.Muted)$($ch.TL)$hr$($ch.TR)$($Theme.Reset)"; Write-Host "$($Theme.Bold)$($Theme.Accent)$($ch.V) $Title$($Theme.Reset)"; Write-Host "$($Theme.Muted)$($ch.BL)$hr$($ch.BR)$($Theme.Reset)"; }
+function Write-StatusEx { param([Parameter(Mandatory)][ValidateSet('Info','Ok','Warn','Error')]$Level,[Parameter(Mandatory)][string]$Text); switch ($Level) { 'Info' { Write-Host "$($Theme.Accent)[*]$($Theme.Reset) $Text" } 'Ok' { Write-Host "$($Theme.Good)[+]$($Theme.Reset) $Text" } 'Warn' { Write-Host "$($Theme.Warn)[!]$($Theme.Reset) $Text" } 'Error' { Write-Host "$($Theme.Bad)[x]$($Theme.Reset) $Text" } } }
+function Invoke-Step { [CmdletBinding()] param([Parameter(Mandatory)][string]$Activity,[Parameter(Mandatory)][scriptblock]$Script); $id=(Get-Random -Minimum 1000 -Maximum 9999); $sw=[Diagnostics.Stopwatch]::StartNew(); Write-Progress -Id $id -Activity $Activity -Status 'Working...' -PercentComplete 0; try { & $Script; $sw.Stop(); Write-Progress -Id $id -Completed -Activity $Activity; Write-StatusEx -Level Ok -Text "$Activity ($([int]$sw.Elapsed.TotalSeconds)s)"; } catch { $sw.Stop(); Write-Progress -Id $id -Completed -Activity $Activity; Write-StatusEx -Level Error -Text "$Activity failed: $($_.Exception.Message)"; throw } }
+function Show-TuiTable { param([Parameter(Mandatory, ValueFromPipeline)]$InputObject) process { $pairs = if ($InputObject -is [hashtable]) { $InputObject.GetEnumerator() | Sort-Object Name } else { $InputObject.PSObject.Properties | Sort-Object Name }; $max = ($pairs | ForEach-Object { $_.Name.Length } | Measure-Object -Maximum).Maximum; foreach ($p in $pairs) { $k=$p.Name; $v=$p.Value; $fmt="{0}{1,-" + $max + "}{2} : {3}"; Write-Host ($fmt -f $Theme.Muted, $k, $Theme.Reset, $v) } } }
+function Read-TuiChoice { param([Parameter(Mandatory)][string]$Title,[Parameter(Mandatory)][string]$Message,[Parameter(Mandatory)][string[]]$Choices,[int]$DefaultIndex=0); $cd = foreach ($c in $Choices) { New-Object Management.Automation.Host.ChoiceDescription "&$c", $c }; $sel = $host.UI.PromptForChoice($Title, $Message, $cd, $DefaultIndex); return $Choices[$sel] }
+function Read-TuiConfirm { param([Parameter(Mandatory)][string]$Message,[switch]$DefaultYes); $choices=@('Yes','No'); $def= if ($DefaultYes) {0} else {1}; (Read-TuiChoice -Title 'Confirm' -Message $Message -Choices $choices -DefaultIndex $def) -eq 'Yes' }
 
 # -------------------------------
 # Configuration
@@ -141,10 +70,7 @@ $wslConfigPath  = Join-Path $env:USERPROFILE ".wslconfig"
 $WSLMemory = if ($env:WSL_MEMORY) { $env:WSL_MEMORY } else { "8GB" }
 $WSLCPUs   = if ($env:WSL_CPUS)   { $env:WSL_CPUS }   else { "4" }
 
-function Write-Status {
-  param([string]$Message, [ConsoleColor]$Color = [ConsoleColor]::Gray)
-  Write-Host $Message -ForegroundColor $Color
-}
+function Write-Status { param([string]$Message, [ConsoleColor]$Color=[ConsoleColor]::Gray); Write-Host $Message -ForegroundColor $Color }
 
 function Ensure-ExecutionPolicy {
   try {
@@ -160,40 +86,11 @@ function Ensure-ExecutionPolicy {
   }
 }
 
-function Test-WslAvailable {
-  & wsl.exe --status *> $null
-  return ($LASTEXITCODE -eq 0)
-}
-
-function Set-WslDefaultVersion2 {
-  if ($PSCmdlet.ShouldProcess("WSL default version", "Set to 2")) {
-    try { $null = & wsl.exe --set-default-version 2 } catch { }
-    Write-StatusEx -Level Info -Text "WSL default version set to 2."
-  }
-}
-
-function Get-WslDistributions {
-  & wsl.exe --list --quiet | ForEach-Object { $_.Trim() } | Where-Object { $_ -ne '' }
-}
-
-function Test-WslDistributionExists {
-  param([Parameter(Mandatory)][string]$Name)
-  $d = Get-WslDistributions
-  return ($d -contains $Name)
-}
-
-function Wait-WslDistribution {
-  param(
-    [Parameter(Mandatory)][string]$Name,
-    [int]$TimeoutSec = 60
-  )
-  $sw = [Diagnostics.Stopwatch]::StartNew()
-  while ($sw.Elapsed.TotalSeconds -lt $TimeoutSec) {
-    if (Test-WslDistributionExists -Name $Name) { return $true }
-    Start-Sleep -Seconds 2
-  }
-  return $false
-}
+function Test-WslAvailable { & wsl.exe --status *> $null; return ($LASTEXITCODE -eq 0) }
+function Set-WslDefaultVersion2 { if ($PSCmdlet.ShouldProcess("WSL default version", "Set to 2")) { try { $null = & wsl.exe --set-default-version 2 } catch { } ; Write-StatusEx -Level Info -Text "WSL default version set to 2." } }
+function Get-WslDistributions { & wsl.exe --list --quiet | ForEach-Object { $_.Trim() } | Where-Object { $_ -ne '' } }
+function Test-WslDistributionExists { param([Parameter(Mandatory)][string]$Name); $d = Get-WslDistributions; return ($d -contains $Name) }
+function Wait-WslDistribution { param([Parameter(Mandatory)][string]$Name,[int]$TimeoutSec=60); $sw=[Diagnostics.Stopwatch]::StartNew(); while ($sw.Elapsed.TotalSeconds -lt $TimeoutSec) { if (Test-WslDistributionExists -Name $Name) { return $true } Start-Sleep -Seconds 2 } return $false }
 
 function Get-WslConfigContent {
 @"
@@ -206,12 +103,7 @@ localhostForwarding=true
 }
 
 function Set-FileContentIfChanged {
-  param(
-    [Parameter(Mandatory)][string]$Path,
-    [Parameter(Mandatory)][string]$NewContent,
-    [string]$BackupSuffix = '.bak',
-    [string]$Encoding = 'utf8NoBOM'
-  )
+  param([Parameter(Mandatory)][string]$Path,[Parameter(Mandatory)][string]$NewContent,[string]$BackupSuffix='.bak',[string]$Encoding='utf8NoBOM')
   $shouldWrite = $true
   if (Test-Path $Path) {
     [byte[]]$existing = [System.IO.File]::ReadAllBytes($Path)
@@ -229,20 +121,12 @@ function Set-FileContentIfChanged {
   }
 }
 
-function Set-WslConfigFile {
-  $content = Get-WslConfigContent
-  Set-FileContentIfChanged -Path $wslConfigPath -NewContent $content -Encoding 'utf8NoBOM'
-}
+function Set-WslConfigFile { $content = Get-WslConfigContent; Set-FileContentIfChanged -Path $wslConfigPath -NewContent $content -Encoding 'utf8NoBOM' }
 
 function ConvertTo-WslPath {
   param([Parameter(Mandatory)][string]$WindowsPath)
-  if ($WindowsPath.StartsWith("\") ) {
-    throw "UNC path not supported by WSL /mnt mapping: '$WindowsPath'"
-  }
-  try {
-    $out = & wsl.exe wslpath -u $WindowsPath 2>$null
-    if ($LASTEXITCODE -eq 0 -and $out) { return $out.Trim() }
-  } catch { }
+  if ($WindowsPath.StartsWith("\") ) { throw "UNC path not supported by WSL /mnt mapping: '$WindowsPath'" }
+  try { $out = & wsl.exe wslpath -u $WindowsPath 2>$null; if ($LASTEXITCODE -eq 0 -and $out) { return $out.Trim() } } catch { }
   $drive = $WindowsPath.Substring(0,1).ToLower()
   $rest = $WindowsPath.Substring(2).Replace("\","/")
   return "/mnt/$drive$rest"
@@ -259,79 +143,60 @@ function ConvertTo-Lf {
   return $temp
 }
 Set-Alias -Name Convert-ToLF -Value ConvertTo-Lf -Scope Local -ErrorAction SilentlyContinue
+function Prepare-BootstrapScript { return (ConvertTo-Lf -Path $bootstrapLocal) }
 
-function Prepare-BootstrapScript {
-  return (ConvertTo-Lf -Path $bootstrapLocal)
-}
+function Invoke-WslChecked { param([Parameter(Mandatory)][string[]]$ArgList,[Parameter(Mandatory)][string]$ErrorContext); & wsl.exe @ArgList; if ($LASTEXITCODE -ne 0) { throw "$ErrorContext failed with exit code $LASTEXITCODE" } }
 
-function Invoke-WslChecked {
-  param(
-    [Parameter(Mandatory)][string[]]$ArgList,
-    [Parameter(Mandatory)][string]$ErrorContext
-  )
-  & wsl.exe @ArgList
-  if ($LASTEXITCODE -ne 0) {
-    throw "$ErrorContext failed with exit code $LASTEXITCODE"
-  }
-}
-
-function Remove-WslDistribution {
-  param([Parameter(Mandatory)][string]$Name)
-  if ($PSCmdlet.ShouldProcess("WSL distro '$Name'", "Unregister")) {
-    Write-StatusEx -Level Warn -Text "Unregistering '$Name'..."
-    & wsl.exe --terminate $Name | Out-Null
-    & wsl.exe --unregister $Name
-  }
-}
-
+function Remove-WslDistribution { param([Parameter(Mandatory)][string]$Name); if ($PSCmdlet.ShouldProcess("WSL distro '$Name'", "Unregister")) { Write-StatusEx -Level Warn -Text "Unregistering '$Name'..."; & wsl.exe --terminate $Name | Out-Null; & wsl.exe --unregister $Name } }
 function Install-WslDistributionNoLaunch {
   param([Parameter(Mandatory)][string]$Name)
   if ($PSCmdlet.ShouldProcess("WSL distro '$Name'", "Install --no-launch")) {
     Write-StatusEx -Level Info -Text "Installing '$Name'..."
-    try {
-      & wsl.exe --install --no-launch -d $Name
-    } catch {
-      Write-Warning "wsl.exe --install failed. If the Microsoft Store Arch is unavailable, consider importing an Arch rootfs manually."
-      throw
-    }
-    if (-not (Wait-WslDistribution -Name $Name -TimeoutSec 120)) {
-      throw "Distro '$Name' did not appear after install."
-    }
+    try { & wsl.exe --install --no-launch -d $Name } catch { Write-Warning "wsl.exe --install failed. If the Microsoft Store Arch is unavailable, consider importing an Arch rootfs manually."; throw }
+    if (-not (Wait-WslDistribution -Name $Name -TimeoutSec 120)) { throw "Distro '$Name' did not appear after install." }
   }
 }
+function Ensure-WslDistributionPresent { param([Parameter(Mandatory)][string]$Name,[switch]$ForceReinstall); if (Test-WslDistributionExists -Name $Name) { if (-not $ForceReinstall) { $resp = Read-Host "Distro '$Name' exists. Unregister it and reinstall? (y/N)"; if ($resp -notin @("y","Y")) { return } } Remove-WslDistribution -Name $Name } ; Install-WslDistributionNoLaunch -Name $Name }
+function Initialize-WslDistribution { param([Parameter(Mandatory)][string]$Name,[switch]$ForceReinstall); Ensure-WslDistributionPresent -Name $Name -ForceReinstall:$ForceReinstall }
+function Resolve-DistroName { param([string]$Requested); $online = (& wsl.exe --list --online 2>$null) -join "`n"; if ($LASTEXITCODE -ne 0 -or -not $online) { return $Requested }; if ($online -match 'Arch Linux') { return 'Arch Linux' }; return $Requested }
 
-function Ensure-WslDistributionPresent {
-  param(
-    [Parameter(Mandatory)][string]$Name,
-    [switch]$ForceReinstall
-  )
-  if (Test-WslDistributionExists -Name $Name) {
-    if (-not $ForceReinstall) {
-      $resp = Read-Host "Distro '$Name' exists. Unregister it and reinstall? (y/N)"
-      if ($resp -notin @("y","Y")) {
-        return
-      }
-    }
-    Remove-WslDistribution -Name $Name
+# ---- Pass-through env to WSL phases (declarative control) ----
+function Escape-BashSingleQuoted { param([string]$s) if ($null -eq $s) { return '' } return ($s -replace "'", "'\"'\"'") }
+function Build-EnvAssignments {
+  param([string[]]$Names)
+  $sb = New-Object System.Text.StringBuilder
+  foreach ($n in $Names) {
+    $v = [System.Environment]::GetEnvironmentVariable($n)
+    if ([string]::IsNullOrEmpty($v)) { continue }
+    $esc = Escape-BashSingleQuoted $v
+    [void]$sb.Append("$n='$esc' ")
   }
-  Install-WslDistributionNoLaunch -Name $Name
+  return $sb.ToString()
 }
 
-function Initialize-WslDistribution {
-  param(
-    [Parameter(Mandatory)][string]$Name,
-    [switch]$ForceReinstall
-  )
-  Ensure-WslDistributionPresent -Name $Name -ForceReinstall:$ForceReinstall
-}
-
-function Resolve-DistroName {
-  param([string]$Requested)
-  $online = (& wsl.exe --list --online 2>$null) -join "`n"
-  if ($LASTEXITCODE -ne 0 -or -not $online) { return $Requested }
-  if ($online -match 'Arch Linux') { return 'Arch Linux' }
-  return $Requested
-}
+# Optional sets we forward if defined (explicit basics kept separate)
+$OptionalEnvPhase1 = @(
+  'ALLOW_NOPASSWD_SUDO','SUDO_NOPASSWD_CMDS','OPTIMIZE_MIRRORS',
+  'PYENV_VERSION_TAG','NVM_VERSION_TAG','PY_VER',
+  'NAMESERVERS_CSV','RESOLV_OPTIONS_CSV',
+  'ENABLE_CONTAINER_PKGS','ENABLE_OPTIONAL_LANG_PACKAGES','ENABLE_OPTIONAL_DOTFILES_HELPERS',
+  'BASE_PACKAGES_CSV','CONTAINER_PACKAGES_CSV','OPTIONAL_LANG_PACKAGES_CSV','OPTIONAL_DOTFILES_HELPERS_CSV',
+  'ENABLE_PYENV','ENABLE_NVM','ENABLE_RUSTUP','ENABLE_LINK_DOTFILES',
+  'ENABLE_SSHD','ENABLE_PODMAN_SOCKET','ENABLE_SYSTEMD_RESOLVED',
+  'RUST_TOOLCHAIN','RUST_COMPONENTS_CSV','NODE_VERSION','RUN_PODMAN_TEST','PYTHON_MODULES_CSV',
+  'PHASE1_TASKS_CSV'
+)
+$OptionalEnvPhase2 = @(
+  'ALLOW_NOPASSWD_SUDO','SUDO_NOPASSWD_CMDS','OPTIMIZE_MIRRORS',
+  'PYENV_VERSION_TAG','NVM_VERSION_TAG','PY_VER',
+  'NAMESERVERS_CSV','RESOLV_OPTIONS_CSV',
+  'ENABLE_CONTAINER_PKGS','ENABLE_OPTIONAL_LANG_PACKAGES','ENABLE_OPTIONAL_DOTFILES_HELPERS',
+  'BASE_PACKAGES_CSV','CONTAINER_PACKAGES_CSV','OPTIONAL_LANG_PACKAGES_CSV','OPTIONAL_DOTFILES_HELPERS_CSV',
+  'ENABLE_PYENV','ENABLE_NVM','ENABLE_RUSTUP','ENABLE_LINK_DOTFILES',
+  'ENABLE_SSHD','ENABLE_PODMAN_SOCKET','ENABLE_SYSTEMD_RESOLVED',
+  'RUST_TOOLCHAIN','RUST_COMPONENTS_CSV','NODE_VERSION','RUN_PODMAN_TEST','PYTHON_MODULES_CSV',
+  'PHASE2_TASKS_CSV'
+)
 
 function New-PhaseCommand {
   param(
@@ -340,9 +205,11 @@ function New-PhaseCommand {
     [Parameter(Mandatory)][string]$MntRepoRoot
   )
   if ($Phase -eq 'phase1') {
-    return "chmod +x '$MntBootstrap' && DEFAULT_USER='$DefaultUser' WSL_MEMORY='$WSLMemory' WSL_CPUS='$WSLCPUs' REPO_ROOT_MNT='$MntRepoRoot' DNS_MODE='$DnsMode' '$MntBootstrap' phase1"
+    $extra = Build-EnvAssignments -Names $OptionalEnvPhase1
+    return "chmod +x '$MntBootstrap' && DEFAULT_USER='$DefaultUser' WSL_MEMORY='$WSLMemory' WSL_CPUS='$WSLCPUs' REPO_ROOT_MNT='$MntRepoRoot' DNS_MODE='$DnsMode' $extra '$MntBootstrap' phase1"
   } else {
-    return "DEFAULT_USER='$DefaultUser' DNS_MODE='$DnsMode' '$MntBootstrap' phase2"
+    $extra = Build-EnvAssignments -Names $OptionalEnvPhase2
+    return "DEFAULT_USER='$DefaultUser' DNS_MODE='$DnsMode' $extra '$MntBootstrap' phase2"
   }
 }
 
@@ -359,16 +226,9 @@ function Invoke-WslPhase {
   }
 }
 
-function Restart-Wsl {
-  if ($PSCmdlet.ShouldProcess("WSL", "Shutdown")) {
-    & wsl.exe --shutdown
-  }
-}
-
+function Restart-Wsl { if ($PSCmdlet.ShouldProcess("WSL", "Shutdown")) { & wsl.exe --shutdown } }
 function Export-WslSnapshot {
-  if ($PSCmdlet.ShouldProcess("WSL '$DistroName'", "Terminate before export")) {
-    & wsl.exe --terminate $DistroName
-  }
+  if ($PSCmdlet.ShouldProcess("WSL '$DistroName'", "Terminate before export")) { & wsl.exe --terminate $DistroName }
   if ($PSCmdlet.ShouldProcess("WSL '$DistroName'", "Export to $snapshotFile")) {
     Write-StatusEx -Level Info -Text "Exporting clean snapshot (warnings about sockets are harmless)..."
     & wsl.exe --export $DistroName $snapshotFile
@@ -388,7 +248,6 @@ function Show-Preflight {
   }
   $obj | Show-TuiTable
 }
-
 function Show-Plan {
   Write-StatusEx -Level Info -Text "Phase 1: base system, keyring, packages, user, DNS($DnsMode), dotfiles"
   Write-StatusEx -Level Info -Text "Restart WSL to enable systemd & default user"
@@ -407,9 +266,7 @@ function Main {
     $DnsMode = Read-TuiChoice -Title "DNS mode" -Message "Select DNS strategy" -Choices @('static','resolved','wsl') -DefaultIndex 0
   }
 
-  if (-not (Test-WslAvailable)) {
-    throw "WSL is not installed or not available. Install WSL and WSL2 first."
-  }
+  if (-not (Test-WslAvailable)) { throw "WSL is not installed or not available. Install WSL and WSL2 first." }
   Write-StatusEx -Level Ok -Text "WSL is installed and available."
 
   Write-Section "Applying host configuration"

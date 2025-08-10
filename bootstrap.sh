@@ -56,7 +56,13 @@ if ! command -v sudo >/dev/null 2>&1; then
     if [ "$#" -ge 3 ] && [ "$1" = "-u" ]; then
       shift
       local __sudo_user="$1"; shift
-      su -s /bin/bash - "$__sudo_user" -c "$*"
+      # Re-quote arguments to preserve spacing/quoting for su -c
+      local __cmd=""
+      local __part
+      for __part in "$@"; do
+        __cmd+=$(printf ' %q' "$__part")
+      done
+      su -s /bin/bash - "$__sudo_user" -c "$__cmd"
     else
       "$@"
     fi

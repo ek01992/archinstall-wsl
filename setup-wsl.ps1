@@ -105,9 +105,11 @@ function Set-FileContentIfChanged {
   )
   $shouldWrite = $true
   if (Test-Path $Path) {
-    $existing = Get-Content -Raw -Encoding Byte -Path $Path
+    # Use .NET to read raw bytes reliably across PS versions.
+    [byte[]]$existing = [System.IO.File]::ReadAllBytes($Path)
     $newBytes = [System.Text.Encoding]::GetEncoding($Encoding).GetBytes($NewContent)
-    $shouldWrite = -not ($existing.Length -eq $newBytes.Length -and ($existing -ceq $newBytes))
+    $areEqual = [System.Linq.Enumerable]::SequenceEqual($existing, $newBytes)
+    $shouldWrite = -not $areEqual
     if ($shouldWrite -and $PSCmdlet.ShouldProcess($Path, "Backup to ${Path}${BackupSuffix}")) {
       Copy-Item $Path "${Path}${BackupSuffix}" -Force
       Write-Status "[i] Backed up existing file to ${Path}${BackupSuffix}" -Color DarkGray

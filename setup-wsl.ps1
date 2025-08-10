@@ -16,7 +16,6 @@ $ErrorActionPreference = 'Stop'
 # Configuration
 # -------------------------------
 $repoRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
-$wslConfigPath = Join-Path $env:USERPROFILE ".wslconfig"
 $snapshotFile = Join-Path $env:USERPROFILE "arch.tar.bak"
 
 $WSLMemory = if ($env:WSL_MEMORY) { $env:WSL_MEMORY } else { "8GB" }

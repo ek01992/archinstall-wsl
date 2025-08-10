@@ -1,0 +1,74 @@
+---
+description: "These standards outline best practices for writing clean, maintainable code, emphasizing readability, simplicity, and efficiency."
+alwaysApply: true
+---
+
+# Clean Code Standards
+
+## Overview
+
+These standards outline best practices for writing clean, maintainable code, emphasizing readability, simplicity, and efficiency. They draw from proven principles to help developers produce high-quality software.
+
+## Naming Conventions
+
+Use meaningful, descriptive names for variables, functions, and classes to make code self-explanatory. Avoid abbreviations and single-letter names except in specific cases like loop counters.
+
+- **Variables**: Use nouns (e.g., `userAge`, `totalPrice`). Prefer `let` for mutable values and `const` for constants.
+- **Functions**: Use action verbs (e.g., `calculateTotal`, `fetchUserData`).
+- **Classes**: Use singular nouns (e.g., `User`, `Order`).
+- **Booleans**: Prefix with `is`, `has`, or `can` (e.g., `isActive`, `hasDiscount`).
+- **Arrays**: Use plurals (e.g., `productNames`).
+- **Constants**: Uppercase with underscores (e.g., `MAX_USERS`).
+- **Scope**: Add prefixes for clarity (e.g., `globalCounter`).
+- **General Rules**: Follow camelCase for variables and functions; avoid single-letter names like `x` or `a`. Declare variables on separate lines.
+
+## Single Responsibility Principle (SRP)
+
+Each function or class should have one focused responsibility. Break down complex tasks into smaller functions.
+
+**Example**:
+
+```javascript
+function calculateTotal(a, b) { return a + b; } // Only calculates
+function logTotal(user, total) { console.log(`User: ${user}, Total: ${total}`); } // Only logs
+```
+
+## Functions
+
+- Keep functions short (ideally <20-30 lines) and focused.
+- Avoid long methods; use helper functions for subtasks.
+- Limit parameters; prefer objects for multiple inputs.
+
+## Readability and Formatting
+
+- Use consistent indentation (2-4 spaces), line breaks, and spacing.
+- Follow the Boy Scout Rule: Leave code cleaner than found.
+- Organize code logically; avoid redundancy.
+- Use tools like Prettier and ESLint for automation.
+
+## Testing
+
+Write unit tests for all code to ensure reliability. Test edge cases and use TDD where possible.
+
+**Example**:
+
+```javascript
+class Calculator { add(a, b) { return a + b; } }
+console.assert(new Calculator().add(2, 3) === 5, "Addition failed");
+```
+
+## Error Handling and Dependencies
+
+- Use dependency injection; avoid hardcoding values.
+- Handle errors explicitly; fail fast and log meaningfully.
+
+## Project Structure
+
+Organize into folders like `src/components`, `services`, `utils`, and `tests`.
+
+## Anti-Patterns
+
+- Avoid duplication, unnecessary comments, and over-commenting.
+- Don't mix responsibilities or hardcode values.
+
+Adhere to these for agile, scalable development.

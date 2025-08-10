@@ -1,0 +1,82 @@
+---
+description: "These standards emphasize effective documentation to preserve knowledge, aid onboarding, and support long-term maintenance."
+alwaysApply: false
+---
+
+# Docs Standards
+
+## Overview
+
+These standards emphasize effective documentation to preserve knowledge, aid onboarding, and support long-term maintenance.
+
+## Importance of Documentation
+
+- Prevents knowledge loss due to forgetting.
+- Improves team learning from past decisions.
+- Aids future developers in understanding changes.
+- Essential in agile development for clarity and collaboration.
+
+## Architectural Decision Records (ADR)
+
+Use ADRs to document key decisions, including context, drivers, options, outcomes, and consequences.
+
+### Template
+
+```md
+# Title: [Decision Name]
+
+## Context and Problem Statement
+
+[Describe issue]
+
+## Decision Drivers
+
+- [Driver 1]
+- [Driver 2]
+
+## Considered Options
+
+- [Option 1]
+- [Option 2]
+
+## Decision Outcome
+
+Chosen: **[Option]** because [reason].
+
+### Consequences
+
+- **Good:** [Pros]
+- **Bad:** [Cons]
+
+### Confirmation
+
+[How to verify]
+
+## Pros and Cons of Options
+
+### [Option 1]
+
+- **Good:** [Pros]
+- **Neutral:** [Neutral]
+- **Bad:** [Cons]
+
+## More Information
+
+[Links or details]
+```
+
+Store ADRs in the repository or tools like Notion/JIRA.
+
+## General Documentation Practices
+
+- Explain "why" over "how"; keep updated to avoid misleading info.
+- Integrate comments sparingly; focus on purpose.
+- Use for complex logic, limitations, or unique approaches.
+- Maintain in agile: Update with code changes; avoid redundancy.
+
+## Tools and Processes
+
+- Link changes to issues for traceability.
+- Review periodically; treat as a team journal.
+
+Prioritize clarity, brevity, and relevance for scalable projects.

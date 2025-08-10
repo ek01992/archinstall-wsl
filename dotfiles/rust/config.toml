@@ -1,0 +1,13 @@
+[build]
+# keep default target dir; customize per project if needed
+# target-dir = "target"
+
+[term]
+verbose = false
+
+[alias]
+b = "build"
+r = "run"
+t = "test"
+fmt = "fmt"
+clip = "clippy"

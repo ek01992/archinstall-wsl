@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
+trap 'printf "%s\n" "[x] Error at ${BASH_SOURCE[0]}:${LINENO}: ${BASH_COMMAND}"' ERR
 
 PHASE="${1:-phase1}"
 DEFAULT_USER="${DEFAULT_USER:-erik}"
@@ -13,6 +14,17 @@ DNS_MODE="${DNS_MODE:-static}"
 # DNS settings when we manage resolv.conf ourselves (static mode)
 NAMESERVERS=("1.1.1.1" "9.9.9.9")
 CHATTR_IMMUTABLE_RESOLV="${CHATTR_IMMUTABLE_RESOLV:-true}"
+
+# Sudo policy
+# To fully disable writing a NOPASSWD sudoers drop-in, set: ALLOW_NOPASSWD_SUDO=false
+ALLOW_NOPASSWD_SUDO="${ALLOW_NOPASSWD_SUDO:-true}"
+# To restrict to a set of commands, set: SUDO_NOPASSWD_CMDS="/usr/bin/pacman, /usr/bin/systemctl"
+# Default is ALL to preserve convenience; override in secure environments.
+SUDO_NOPASSWD_CMDS="${SUDO_NOPASSWD_CMDS:-ALL}"
+
+# Toolchain installer pins
+PYENV_VERSION_TAG="${PYENV_VERSION_TAG:-v2.4.17}"
+NVM_VERSION_TAG="${NVM_VERSION_TAG:-v0.39.7}"
 
 # Package selections
 BASE_PACKAGES=(
@@ -297,13 +309,19 @@ ensure_pacman_parallel_downloads() {
     printf "\n[options]\n" | sudo tee -a /etc/pacman.conf >/dev/null
   fi
 
-  sudo awk '
+  local pd
+  pd="$(nproc 2>/dev/null || echo 2)"
+  pd=$(( pd * 2 ))
+  [ "$pd" -gt 16 ] && pd=16
+  [ "$pd" -lt 2 ] && pd=2
+
+  sudo awk -v pd="$pd" '
     BEGIN{inopt=0; inserted=0}
     /^\[/{ inopt = ($0 ~ /^\[options\]/); print; next }
     {
       if (inopt && $1 ~ /^ParallelDownloads/) next
       print
-      if (inopt && !inserted) { print "ParallelDownloads = 10"; inserted=1 }
+      if (inopt && !inserted) { print "ParallelDownloads = " pd; inserted=1 }
     }
   ' /etc/pacman.conf | sudo tee /etc/pacman.conf.tmp >/dev/null
   sudo mv /etc/pacman.conf.tmp /etc/pacman.conf
@@ -373,12 +391,17 @@ install_packages() {
 ensure_user_and_sudo() {
   local user="$1"
   if ! id -u "$user" >/dev/null 2>&1; then
-    ui::info "Creating user $user with passwordless sudo"
+    ui::info "Creating user $user"
     sudo useradd -m -s /bin/bash "$user"
   fi
-  local sudo_file="/etc/sudoers.d/99-${user}-nopasswd"
-  echo "${user} ALL=(ALL) NOPASSWD:ALL" | sudo tee "$sudo_file" >/dev/null
-  sudo chmod 0440 "$sudo_file"
+
+  if [ "${ALLOW_NOPASSWD_SUDO}" = "true" ]; then
+    local sudo_file="/etc/sudoers.d/99-${user}-nopasswd"
+    echo "${user} ALL=(ALL) NOPASSWD:${SUDO_NOPASSWD_CMDS}" | sudo tee "$sudo_file" >/dev/null
+    sudo chmod 0440 "$sudo_file"
+  else
+    ui::warn "NOPASSWD sudo disabled via ALLOW_NOPASSWD_SUDO=false"
+  fi
 }
 
 ensure_subids() {
@@ -499,7 +522,12 @@ install_pyenv_for_user() {
   ensure_user_rc_files "$user"
 
   if [ ! -d "${home_dir}/.pyenv" ]; then
-    sudo -u "$user" env -i HOME="$home_dir" PATH="/usr/bin:/bin" bash -lc 'set -e; command -v curl >/dev/null 2>&1; curl -fsSL https://pyenv.run | bash'
+    sudo -u "$user" env -i HOME="$home_dir" PATH="/usr/bin:/bin" bash -lc "
+      set -euo pipefail
+      git clone https://github.com/pyenv/pyenv.git \"\$HOME/.pyenv\"
+      cd \"\$HOME/.pyenv\"
+      git checkout ${PYENV_VERSION_TAG}
+    "
   fi
 
   append_once 'export PYENV_ROOT="$HOME/.pyenv"' "${home_dir}/.bashrc"
@@ -523,7 +551,12 @@ install_nvm_for_user() {
   ensure_user_rc_files "$user"
 
   if [ ! -d "${home_dir}/.nvm" ]; then
-    sudo -u "$user" env -i HOME="$home_dir" PATH="/usr/bin:/bin" bash -lc 'set -e; command -v curl >/dev/null 2>&1; curl -fsSL https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.7/install.sh | bash'
+    sudo -u "$user" env -i HOME="$home_dir" PATH="/usr/bin:/bin" bash -lc "
+      set -euo pipefail
+      git clone https://github.com/nvm-sh/nvm.git \"\$HOME/.nvm\"
+      cd \"\$HOME/.nvm\"
+      git checkout ${NVM_VERSION_TAG}
+    "
   fi
 
   append_once 'export NVM_DIR="$HOME/.nvm"' "${home_dir}/.bashrc"
@@ -545,7 +578,10 @@ install_rustup_for_user() {
   ensure_user_rc_files "$user"
 
   if [ ! -x "${home_dir}/.cargo/bin/rustc" ]; then
-    sudo -u "$user" env -i HOME="$home_dir" PATH="/usr/bin:/bin" bash -lc 'set -e; command -v curl >/dev/null 2>&1; curl --proto "=https" --tlsv1.2 -fsSL https://sh.rustup.rs | sh -s -- -y'
+    sudo -u "$user" env -i HOME="$home_dir" PATH="/usr/bin:/bin" bash -lc 'set -e
+      command -v curl >/dev/null 2>&1
+      curl --proto "=https" --tlsv1.2 -fsSL https://sh.rustup.rs | sh -s -- -y --profile minimal --default-toolchain stable --no-modify-path
+    '
   fi
   append_once 'export PATH="$HOME/.cargo/bin:$PATH"' "${home_dir}/.bashrc"
 
@@ -747,11 +783,7 @@ phase1_main() {
     "Optimize mirrors" "${OPTIMIZE_MIRRORS}" \
     "Repo root (mnt)" "${REPO_ROOT_MNT:-<auto>}"
 
-  # Optional interactive DNS selection if requested and in TTY
-  # if [[ -t 1 && "${PROMPT_DNS_MODE:-0}" = "1" ]]; then
-  #   DNS_MODE="$(ui::choose "DNS mode" static resolved wsl)"
-  #   ui::ok "Selected DNS mode: ${DNS_MODE}"
-  # fi
+  # ui::choose flow optional here
 
   ui::step "Ensure locale" ensure_locale
   ui::step "Updating system" pacman_quiet_update

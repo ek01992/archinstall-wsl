@@ -133,10 +133,10 @@ function Read-TuiConfirm {
 # -------------------------------
 # Configuration
 # -------------------------------
-$repoRoot     = Split-Path -Parent $MyInvocation.MyCommand.Path
+$repoRoot       = Split-Path -Parent $MyInvocation.MyCommand.Path
 $bootstrapLocal = Join-Path $repoRoot "bootstrap.sh"
-$snapshotFile = Join-Path $env:USERPROFILE "arch.tar.bak"
-$wslConfigPath = Join-Path $env:USERPROFILE ".wslconfig"
+$snapshotFile   = Join-Path $env:USERPROFILE ("arch-" + (Get-Date -Format yyyyMMdd-HHmm) + ".tar")
+$wslConfigPath  = Join-Path $env:USERPROFILE ".wslconfig"
 
 $WSLMemory = if ($env:WSL_MEMORY) { $env:WSL_MEMORY } else { "8GB" }
 $WSLCPUs   = if ($env:WSL_CPUS)   { $env:WSL_CPUS }   else { "4" }
@@ -210,7 +210,7 @@ function Set-FileContentIfChanged {
     [Parameter(Mandatory)][string]$Path,
     [Parameter(Mandatory)][string]$NewContent,
     [string]$BackupSuffix = '.bak',
-    [string]$Encoding = 'ASCII'
+    [string]$Encoding = 'utf8NoBOM'
   )
   $shouldWrite = $true
   if (Test-Path $Path) {
@@ -231,14 +231,18 @@ function Set-FileContentIfChanged {
 
 function Set-WslConfigFile {
   $content = Get-WslConfigContent
-  Set-FileContentIfChanged -Path $wslConfigPath -NewContent $content -Encoding 'ASCII'
+  Set-FileContentIfChanged -Path $wslConfigPath -NewContent $content -Encoding 'utf8NoBOM'
 }
 
 function ConvertTo-WslPath {
   param([Parameter(Mandatory)][string]$WindowsPath)
-  if ($WindowsPath.StartsWith("\\") ) {
+  if ($WindowsPath.StartsWith("\") ) {
     throw "UNC path not supported by WSL /mnt mapping: '$WindowsPath'"
   }
+  try {
+    $out = & wsl.exe wslpath -u $WindowsPath 2>$null
+    if ($LASTEXITCODE -eq 0 -and $out) { return $out.Trim() }
+  } catch { }
   $drive = $WindowsPath.Substring(0,1).ToLower()
   $rest = $WindowsPath.Substring(2).Replace("\","/")
   return "/mnt/$drive$rest"
@@ -321,6 +325,14 @@ function Initialize-WslDistribution {
   Ensure-WslDistributionPresent -Name $Name -ForceReinstall:$ForceReinstall
 }
 
+function Resolve-DistroName {
+  param([string]$Requested)
+  $online = (& wsl.exe --list --online 2>$null) -join "`n"
+  if ($LASTEXITCODE -ne 0 -or -not $online) { return $Requested }
+  if ($online -match 'Arch Linux') { return 'Arch Linux' }
+  return $Requested
+}
+
 function New-PhaseCommand {
   param(
     [Parameter(Mandatory)][ValidateSet('phase1','phase2')] [string]$Phase,
@@ -385,6 +397,8 @@ function Show-Plan {
 }
 
 function Main {
+  $DistroName = Resolve-DistroName -Requested $DistroName
+
   Write-Section "Preflight summary"
   Show-Preflight
   Ensure-ExecutionPolicy
@@ -412,7 +426,7 @@ function Main {
   Show-Plan
 
   $tempBootstrap = Prepare-BootstrapScript
-  if ($tempBootstrap.StartsWith("\\") -or $repoRoot.StartsWith("\\")) {
+  if ($tempBootstrap.StartsWith("\") -or $repoRoot.StartsWith("\")) {
     throw "Repository or temp path is a UNC path. Please use a local drive path for correct /mnt mapping."
   }
   $mntBootstrap = ConvertTo-WslPath -WindowsPath $tempBootstrap

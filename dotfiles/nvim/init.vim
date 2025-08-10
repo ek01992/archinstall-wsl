@@ -18,5 +18,5 @@ set smartcase
 
 " Map space as leader and simple helpers
 let mapleader=" "
-nnoremap w :w
-nnoremap q :q
+nnoremap <leader>w :w<CR>
+nnoremap <leader>q :q<CR>

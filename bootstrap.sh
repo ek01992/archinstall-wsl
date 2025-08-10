@@ -41,7 +41,7 @@ retry() {
   local tries="$1" delay="$2"; shift 2
   local n=1
   until "$@"; do
-    if (( n >= tries )); then
+    if (( n >= tries  )); then
       return 1
     fi
     sleep "$delay"
@@ -76,7 +76,6 @@ append_once() {
 }
 
 safe_link() {
-  # link with backup if dest exists and is not the same link
   local src="$1" dest="$2"
   mkdir -p "$(dirname "$dest")"
   if [ -e "$dest" ] && [ ! -L "$dest" ]; then
@@ -88,11 +87,38 @@ safe_link() {
 safe_link_user() {
   local user="$1" src="$2" dest="$3"
   sudo -u "$user" bash -lc "mkdir -p \"\$(dirname \"$dest\")\""
-  # If a regular file exists, back it up
   if sudo -u "$user" test -e "$dest" && ! sudo -u "$user" test -L "$dest"; then
     sudo -u "$user" mv -n "$dest" "${dest}.bak" || true
   fi
   sudo -u "$user" ln -sfn "$src" "$dest"
+}
+
+get_user_home() {
+  local user="$1"
+  local hd
+  hd="$(getent passwd "$user" | cut -d: -f6 || true)"
+  if [ -z "${hd:-}" ]; then
+    hd="$(su -s /bin/bash - "$user" -c 'printf %s "$HOME"' 2>/dev/null || true)"
+  fi
+  [ -n "${hd:-}" ] && printf '%s\n' "$hd" || return 1
+}
+
+ensure_user_rc_files() {
+  # Create ~/.bashrc and ~/.profile for the user if missing, ensure ownership
+  local user="$1"
+  local home_dir
+  home_dir="$(get_user_home "$user")" || fail "Could not determine home for user '$user'"
+  install -d -o "$user" -g "$user" "$home_dir"
+  if [ ! -e "$home_dir/.bashrc" ]; then
+    install -o "$user" -g "$user" -m 0644 -D /dev/null "$home_dir/.bashrc"
+  else
+    chown "$user:$user" "$home_dir/.bashrc" || true
+  fi
+  if [ ! -e "$home_dir/.profile" ]; then
+    install -o "$user" -g "$user" -m 0644 -D /dev/null "$home_dir/.profile"
+  else
+    chown "$user:$user" "$home_dir/.profile" || true
+  fi
 }
 
 # --------------------------------------------
@@ -113,12 +139,10 @@ optimize_mirrors_if_enabled() {
     return 0
   fi
 
-  # Ensure [options] exists
   if ! grep -q '^\[options\]' /etc/pacman.conf; then
     printf "\n[options]\n" | sudo tee -a /etc/pacman.conf >/dev/null
   fi
 
-  # Normalize ParallelDownloads under [options]
   sudo awk '
     BEGIN{inopt=0; inserted=0}
     /^\[/{ inopt = ($0 ~ /^\[options\]/); print; next }
@@ -235,7 +259,6 @@ configure_dns_resolved() {
   fi
   sudo rm -f /etc/resolv.conf || true
 
-  # Service that links resolv.conf to resolved stub at boot
   cat <<'EOF' | sudo tee /etc/systemd/system/wsl-resolved-link.service >/dev/null
 [Unit]
 Description=WSL: Link /etc/resolv.conf to systemd-resolved stub
@@ -259,7 +282,6 @@ configure_dns_wsl() {
     sudo chattr -i /etc/resolv.conf 2>/dev/null || true
   fi
   sudo rm -f /etc/resolv.conf || true
-  # Let WSL regenerate on next start
 }
 
 configure_dns() {
@@ -277,13 +299,12 @@ configure_dns() {
 install_pyenv_nvm_rustup_for_user() {
   local user="$1"
   local home_dir
-  home_dir="$(eval echo ~"$user")"
+  home_dir="$(get_user_home "$user")" || fail "Could not determine home for user '$user'"
 
   log "*" "Setting up pyenv, nvm, rustup for ${user}"
 
   # Ensure shell rc files exist and are owned by the user BEFORE installers amend them
-  sudo -u "$user" bash -lc 'touch "$HOME/.bashrc" "$HOME/.profile"'
-  sudo chown "$user:$user" "${home_dir}/.bashrc" "${home_dir}/.profile" 2>/dev/null || true
+  ensure_user_rc_files "$user"
 
   # pyenv
   if [ ! -d "${home_dir}/.pyenv" ]; then
@@ -315,7 +336,7 @@ install_pyenv_nvm_rustup_for_user() {
   fi
   append_once 'export PATH="$HOME/.cargo/bin:$PATH"' "${home_dir}/.bashrc"
 
-  # Ensure ownership for future edits
+  # Make sure ownership is correct for future edits
   sudo chown "$user:$user" "${home_dir}/.bashrc" "${home_dir}/.profile" 2>/dev/null || true
   sudo chown -R "$user:$user" "${home_dir}/.pyenv" "${home_dir}/.nvm" "${home_dir}/.cargo" 2>/dev/null || true
 }
@@ -323,7 +344,7 @@ install_pyenv_nvm_rustup_for_user() {
 link_dotfiles_for_user() {
   local user="$1"
   local home_dir
-  home_dir="$(eval echo ~"$user")"
+  home_dir="$(get_user_home "$user")" || fail "Could not determine home for user '$user'"
   local dotroot=""
 
   if [ -n "$REPO_ROOT_MNT" ] && [ -d "$REPO_ROOT_MNT/dotfiles" ]; then
@@ -445,9 +466,9 @@ finalize_user_toolchains() {
     export PYENV_ROOT="$HOME/.pyenv"; [ -d "$PYENV_ROOT/bin" ] && export PATH="$PYENV_ROOT/bin:$PATH"; command -v pyenv >/dev/null 2>&1 && eval "$(pyenv init -)"
     export PATH="$HOME/.cargo/bin:$PATH"
     echo "[*] Versions summary:"
-    command -v node >/dev/null 2>&1 && echo "  node: $(node -v)" || true
+    command -v node   >/dev/null 2>&1 && echo "  node: $(node -v)" || true
     command -v python >/dev/null 2>&1 && echo "  python: $(python -V 2>&1)" || true
-    command -v rustc >/dev/null 2>&1 && echo "  rustc: $(rustc -V 2>/dev/null)" || true
+    command -v rustc  >/dev/null 2>&1 && echo "  rustc: $(rustc -V 2>/dev/null)" || true
     command -v podman >/dev/null 2>&1 && echo "  podman: $(podman --version 2>/dev/null)" || true
   '
 }

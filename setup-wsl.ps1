@@ -45,13 +45,15 @@ function Write-Preflight {
   Write-Host "    Snapshot target:  $snapshotFile"
 }
 
-function Ensure-WSL2Default {
-  $status = & wsl.exe --status 2>$null
+function Set-WSLDefault {
+  $null = & wsl.exe --status 2>$null
+  Write-Host "[*] WSL is installed and available."
   if ($LASTEXITCODE -ne 0) {
     throw "WSL is not installed or not available. Install WSL and WSL2 first."
   }
   # Try to set default version 2 (best-effort)
-  try { & wsl.exe --set-default-version 2 | Out-Null } catch { }
+  try { $null = & wsl.exe --set-default-version 2 } catch { }
+  Write-Host "[*] WSL default version set to 2."
 }
 
 function Write-WslConfigSafe {
@@ -91,7 +93,7 @@ function Wait-ForDistro {
 }
 
 Write-Preflight
-Ensure-WSL2Default
+Set-WSLDefault
 Write-WslConfigSafe
 
 Write-Host "[*] Applying .wslconfig (wsl --shutdown)..."

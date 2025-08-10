@@ -22,6 +22,77 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
 # -------------------------------
+# TTY-aware theming / TUI helpers
+# -------------------------------
+$IsTty = $true
+try { $IsTty = -not [Console]::IsOutputRedirected } catch { $IsTty = $false }
+if ($IsTty -and $env:NO_COLOR) { $PSStyle.OutputRendering = 'PlainText' }
+
+$Theme = @{
+  Accent = $PSStyle.Foreground.Cyan
+  Good   = $PSStyle.Foreground.Green
+  Warn   = $PSStyle.Foreground.Yellow
+  Bad    = $PSStyle.Foreground.Red
+  Muted  = $PSStyle.Foreground.DarkGray
+  Bold   = $PSStyle.Bold
+  Reset  = $PSStyle.Reset
+}
+
+function Write-Section {
+  param([Parameter(Mandatory)][string]$Title)
+  $w = 80
+  try { $w = [Math]::Max(20, [Console]::WindowWidth) } catch { $w = 80 }
+  $hr = '─' * ([Math]::Max(10, $w - 2))
+  Write-Host "$($Theme.Muted)┌$hr$($Theme.Reset)"
+  Write-Host "$($Theme.Bold)$($Theme.Accent)│ $Title$($Theme.Reset)"
+  Write-Host "$($Theme.Muted)└$hr$($Theme.Reset)"
+}
+
+function Write-StatusEx {
+  param(
+    [Parameter(Mandatory)][ValidateSet('Info','Ok','Warn','Error')]$Level,
+    [Parameter(Mandatory)][string]$Text
+  )
+  switch ($Level) {
+    'Info'  { Write-Host "$($Theme.Accent)[*]$($Theme.Reset) $Text" }
+    'Ok'    { Write-Host "$($Theme.Good)[+]$($Theme.Reset) $Text" }
+    'Warn'  { Write-Host "$($Theme.Warn)[!]$($Theme.Reset) $Text" }
+    'Error' { Write-Host "$($Theme.Bad)[x]$($Theme.Reset) $Text" }
+  }
+}
+
+function Invoke-Step {
+  [CmdletBinding()]
+  param([Parameter(Mandatory)][string]$Activity, [Parameter(Mandatory)][scriptblock]$Script)
+  $id = (Get-Random -Minimum 1000 -Maximum 9999)
+  $sw = [Diagnostics.Stopwatch]::StartNew()
+  Write-Progress -Id $id -Activity $Activity -Status 'Working...' -PercentComplete 0
+  try {
+    & $Script
+    $sw.Stop()
+    Write-Progress -Id $id -Completed -Activity $Activity
+    Write-StatusEx -Level Ok -Text "$Activity ($([int]$sw.Elapsed.TotalSeconds)s)"
+  } catch {
+    $sw.Stop()
+    Write-Progress -Id $id -Completed -Activity $Activity
+    Write-StatusEx -Level Error -Text "$Activity failed: $($_.Exception.Message)"
+    throw
+  }
+}
+
+function Prompt-Choice {
+  param(
+    [Parameter(Mandatory)][string]$Title,
+    [Parameter(Mandatory)][string]$Message,
+    [Parameter(Mandatory)][string[]]$Choices,
+    [int]$DefaultIndex = 0
+  )
+  $cd = foreach ($c in $Choices) { New-Object Management.Automation.Host.ChoiceDescription "&$c", $c }
+  $sel = $host.UI.PromptForChoice($Title, $Message, $cd, $DefaultIndex)
+  return $Choices[$sel]
+}
+
+# -------------------------------
 # Configuration
 # -------------------------------
 $repoRoot     = Split-Path -Parent $MyInvocation.MyCommand.Path
@@ -59,7 +130,7 @@ function Test-WslAvailable {
 function Set-WslDefaultVersion2 {
   if ($PSCmdlet.ShouldProcess("WSL default version", "Set to 2")) {
     try { $null = & wsl.exe --set-default-version 2 } catch { }
-    Write-Status "[*] WSL default version set to 2." -Color Cyan
+    Write-StatusEx -Level Info -Text "WSL default version set to 2."
   }
 }
 
@@ -87,7 +158,7 @@ function Wait-WslDistribution {
 }
 
 function Get-WslConfigContent {
-  @"
+@"
 [wsl2]
 memory=$WSLMemory
 processors=$WSLCPUs
@@ -105,19 +176,19 @@ function Set-FileContentIfChanged {
   )
   $shouldWrite = $true
   if (Test-Path $Path) {
-    # Use .NET to read raw bytes reliably across PS versions.
+    # Use .NET to read raw bytes reliably across PS versions (see PURE-03 rationale).
     [byte[]]$existing = [System.IO.File]::ReadAllBytes($Path)
     $newBytes = [System.Text.Encoding]::GetEncoding($Encoding).GetBytes($NewContent)
     $areEqual = [System.Linq.Enumerable]::SequenceEqual($existing, $newBytes)
     $shouldWrite = -not $areEqual
     if ($shouldWrite -and $PSCmdlet.ShouldProcess($Path, "Backup to ${Path}${BackupSuffix}")) {
       Copy-Item $Path "${Path}${BackupSuffix}" -Force
-      Write-Status "[i] Backed up existing file to ${Path}${BackupSuffix}" -Color DarkGray
+      Write-StatusEx -Level Info -Text "Backed up existing file to ${Path}${BackupSuffix}"
     }
   }
   if ($shouldWrite -and $PSCmdlet.ShouldProcess($Path, "Write updated content")) {
     $NewContent | Set-Content -Encoding $Encoding -NoNewline -Path $Path
-    Write-Status "[*] Wrote $Path" -Color Cyan
+    Write-StatusEx -Level Ok -Text "Wrote $Path"
   }
 }
 
@@ -136,19 +207,21 @@ function ConvertTo-WslPath {
   return "/mnt/$drive$rest"
 }
 
-function Convert-ToLF {
+function ConvertTo-Lf {
   param([Parameter(Mandatory)][string]$Path)
   $text = Get-Content -Raw -Encoding UTF8 $Path
   $text = $text -replace "`r`n","`n"
   $text = $text -replace "`r","`n"
   $temp = Join-Path $env:TEMP ([IO.Path]::GetFileNameWithoutExtension($Path) + "-lf" + [IO.Path]::GetExtension($Path))
   Set-Content -Path $temp -Value $text -NoNewline -Encoding utf8NoBOM
-  Write-Status "[*] Prepared $temp (LF line endings)." -Color Cyan
+  Write-StatusEx -Level Ok -Text "Prepared $temp (LF line endings)."
   return $temp
 }
+# Back-compat alias if referenced elsewhere
+Set-Alias -Name Convert-ToLF -Value ConvertTo-Lf -Scope Local -ErrorAction SilentlyContinue
 
 function Prepare-BootstrapScript {
-  return (Convert-ToLF -Path $bootstrapLocal)
+  return (ConvertTo-Lf -Path $bootstrapLocal)
 }
 
 function Invoke-WslChecked {
@@ -165,7 +238,7 @@ function Invoke-WslChecked {
 function Remove-WslDistribution {
   param([Parameter(Mandatory)][string]$Name)
   if ($PSCmdlet.ShouldProcess("WSL distro '$Name'", "Unregister")) {
-    Write-Status "[*] Unregistering '$Name'..." -Color Yellow
+    Write-StatusEx -Level Warn -Text "Unregistering '$Name'..."
     & wsl.exe --terminate $Name | Out-Null
     & wsl.exe --unregister $Name
   }
@@ -174,7 +247,7 @@ function Remove-WslDistribution {
 function Install-WslDistributionNoLaunch {
   param([Parameter(Mandatory)][string]$Name)
   if ($PSCmdlet.ShouldProcess("WSL distro '$Name'", "Install --no-launch")) {
-    Write-Status "[*] Installing '$Name'..." -Color Cyan
+    Write-StatusEx -Level Info -Text "Installing '$Name'..."
     try {
       & wsl.exe --install --no-launch -d $Name
     } catch {
@@ -202,6 +275,15 @@ function Ensure-WslDistributionPresent {
     Remove-WslDistribution -Name $Name
   }
   Install-WslDistributionNoLaunch -Name $Name
+}
+
+# Preferred name using approved verbs; keep wrapper above for back-compat
+function Initialize-WslDistribution {
+  param(
+    [Parameter(Mandatory)][string]$Name,
+    [switch]$ForceReinstall
+  )
+  Ensure-WslDistributionPresent -Name $Name -ForceReinstall:$ForceReinstall
 }
 
 function New-PhaseCommand {
@@ -241,49 +323,55 @@ function Export-WslSnapshot {
     & wsl.exe --terminate $DistroName
   }
   if ($PSCmdlet.ShouldProcess("WSL '$DistroName'", "Export to $snapshotFile")) {
-    Write-Status "[*] Exporting clean snapshot (warnings about sockets are harmless)..." -Color Cyan
+    Write-StatusEx -Level Info -Text "Exporting clean snapshot (warnings about sockets are harmless)..."
     & wsl.exe --export $DistroName $snapshotFile
-    Write-Status "[+] Snapshot saved to: $snapshotFile" -Color Green
+    Write-StatusEx -Level Ok -Text "Snapshot saved to: $snapshotFile"
   }
 }
 
 function Show-Preflight {
-  Write-Status "[*] Preflight summary:" -Color Cyan
-  Write-Status ("    Distro:           {0}" -f $DistroName)
-  Write-Status ("    Default user:     {0}" -f $DefaultUser)
-  Write-Status ("    CPUs:             {0}" -f $WSLCPUs)
-  Write-Status ("    Memory:           {0}" -f $WSLMemory)
-  Write-Status ("    Swap:             {0}GB" -f $SwapGB)
-  Write-Status ("    DNS mode:         {0}" -f $DnsMode)
-  Write-Status ("    Snapshot target:  {0}" -f $snapshotFile)
+  Write-StatusEx -Level Info -Text ("Distro:           {0}" -f $DistroName)
+  Write-StatusEx -Level Info -Text ("Default user:     {0}" -f $DefaultUser)
+  Write-StatusEx -Level Info -Text ("CPUs:             {0}" -f $WSLCPUs)
+  Write-StatusEx -Level Info -Text ("Memory:           {0}" -f $WSLMemory)
+  Write-StatusEx -Level Info -Text ("Swap:             {0}GB" -f $SwapGB)
+  Write-StatusEx -Level Info -Text ("DNS mode:         {0}" -f $DnsMode)
+  Write-StatusEx -Level Info -Text ("Snapshot target:  {0}" -f $snapshotFile)
 }
 
 function Show-Plan {
-  Write-Status "[*] What this script will do:" -Color Cyan
-  Write-Status "    - Phase 1: base system, keyring, packages, user, DNS($DnsMode), dotfiles"
-  Write-Status "    - Restart WSL to enable systemd & default user"
-  Write-Status "    - Phase 2: enable services and finalize toolchains"
+  Write-StatusEx -Level Info -Text "Phase 1: base system, keyring, packages, user, DNS($DnsMode), dotfiles"
+  Write-StatusEx -Level Info -Text "Restart WSL to enable systemd & default user"
+  Write-StatusEx -Level Info -Text "Phase 2: enable services and finalize toolchains"
   Write-Host ""
 }
 
 function Main {
+  Write-Section "Preflight summary"
   Show-Preflight
   Ensure-ExecutionPolicy
+
+  # Optional interactive DNS selection if not explicitly bound and in TTY
+  if (-not $PSBoundParameters.ContainsKey('DnsMode') -and $IsTty) {
+    $DnsMode = Prompt-Choice -Title "DNS mode" -Message "Select DNS strategy" -Choices @('static','resolved','wsl') -DefaultIndex 0
+  }
 
   if (-not (Test-WslAvailable)) {
     throw "WSL is not installed or not available. Install WSL and WSL2 first."
   }
-  Write-Status "[*] WSL is installed and available." -Color Cyan
-  Set-WslDefaultVersion2
-  Set-WslConfigFile
+  Write-StatusEx -Level Ok -Text "WSL is installed and available."
 
-  Write-Status "[*] Applying .wslconfig (wsl --shutdown)..." -Color Cyan
+  Write-Section "Applying host configuration"
+  Invoke-Step -Activity "Set WSL default version 2" -Script { Set-WslDefaultVersion2 }
+  Invoke-Step -Activity "Write .wslconfig" -Script { Set-WslConfigFile }
+  Write-StatusEx -Level Info -Text "Applying .wslconfig (wsl --shutdown)..."
   Restart-Wsl
   Start-Sleep -Milliseconds 1500
 
-  Write-Status "[*] Checking WSL installation..." -Color DarkGray
+  Write-StatusEx -Level Info -Text "Checking WSL installation..."
   & wsl.exe --status | Out-Null
 
+  Write-Section "Plan"
   Show-Plan
 
   # Prepare bootstrap script with LF endings and map to /mnt path
@@ -294,26 +382,24 @@ function Main {
   $mntBootstrap = ConvertTo-WslPath -WindowsPath $tempBootstrap
   $mntRepoRoot  = ConvertTo-WslPath -WindowsPath $repoRoot
 
-  Write-Status "[*] Preparing distro '$DistroName'..." -Color Cyan
-  Ensure-WslDistributionPresent -Name $DistroName -ForceReinstall:$Force
+  Write-Section "Phase 1"
+  Invoke-Step -Activity "Prepare distro '$DistroName'" -Script { Ensure-WslDistributionPresent -Name $DistroName -ForceReinstall:$Force }
+  Invoke-Step -Activity "Run Phase 1 inside WSL" -Script { Invoke-WslPhase -Phase 'phase1' -MntBootstrap $mntBootstrap -MntRepoRoot $mntRepoRoot }
 
-  Write-Status "[*] Running Phase 1 inside WSL as root..." -Color Cyan
-  Invoke-WslPhase -Phase 'phase1' -MntBootstrap $mntBootstrap -MntRepoRoot $mntRepoRoot
-
-  Write-Status "[*] Shutting down WSL to activate systemd and default user..." -Color Cyan
+  Write-Section "Phase 2"
+  Write-StatusEx -Level Info -Text "Shutting down WSL to activate systemd and default user..."
   Restart-Wsl
+  Invoke-Step -Activity "Run Phase 2 inside WSL" -Script { Invoke-WslPhase -Phase 'phase2' -MntBootstrap $mntBootstrap -MntRepoRoot $mntRepoRoot }
 
-  Write-Status "[*] Running Phase 2 inside WSL..." -Color Cyan
-  Invoke-WslPhase -Phase 'phase2' -MntBootstrap $mntBootstrap -MntRepoRoot $mntRepoRoot
+  Write-Section "Snapshot"
+  Invoke-Step -Activity "Export clean snapshot" -Script { Export-WslSnapshot }
 
-  Export-WslSnapshot
-
+  Write-Section "Summary"
+  Write-StatusEx -Level Info -Text "Reset steps:"
+  Write-Host "  wsl --unregister $DistroName"
+  Write-Host "  wsl --import $DistroName C:\WSL\Arch $snapshotFile --version 2"
   Write-Host ""
-  Write-Status "Reset steps:" -Color Cyan
-  Write-Status "  wsl --unregister $DistroName"
-  Write-Status "  wsl --import $DistroName C:\WSL\Arch $snapshotFile --version 2"
-  Write-Host ""
-  Write-Status "Done." -Color Green
+  Write-StatusEx -Level Ok -Text "Done."
 }
 
 Main

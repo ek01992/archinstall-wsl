@@ -51,6 +51,58 @@ retry() {
   done
 }
 
+# --------------------------------------------
+# TTY-aware UI helpers (colors, sections, spinner)
+# --------------------------------------------
+if [ -t 1 ] && [ -z "${NO_COLOR:-}" ]; then
+  BOLD="$(printf '\033[1m')"; RESET="$(printf '\033[0m')"
+  CYAN="$(printf '\033[36m')"; GREEN="$(printf '\033[32m')"
+  YELLOW="$(printf '\033[33m')"; RED="$(printf '\033[31m')"
+else
+  BOLD=""; RESET=""; CYAN=""; GREEN=""; YELLOW=""; RED=""
+fi
+
+ui::cols() { tput cols 2>/dev/null || printf 80; }
+ui::hr() { local w; w="$(ui::cols)"; printf '%*s' "$(( w-2 ))" | tr ' ' '─'; }
+
+ui::section() {
+  printf "%b\n" "${CYAN}$(ui::hr)${RESET}"
+  printf "%b\n" "${BOLD}${CYAN}▶ $*${RESET}"
+  printf "%b\n" "${CYAN}$(ui::hr)${RESET}"
+}
+ui::info()  { printf "%b\n" "${CYAN}[*]${RESET} $*"; }
+ui::ok()    { printf "%b\n" "${GREEN}[+]${RESET} $*"; }
+ui::warn()  { printf "%b\n" "${YELLOW}[!]${RESET} $*"; }
+ui::err()   { printf "%b\n" "${RED}[x]${RESET} $*"; }
+
+# Spinner: ui::run_with_spinner "Message" cmd args...
+ui::run_with_spinner() {
+  local msg="$1"; shift
+  local spin='-\|/'; local i=0
+  "$@" & local pid=$!
+  while kill -0 "$pid" 2>/dev/null; do
+    i=$(( (i+1) %4 ))
+    printf "\r${CYAN}[%s]${RESET} %s" "${spin:$i:1}" "$msg"
+    sleep 0.1
+  done
+  wait "$pid"; local rc=$?
+  printf "\r"
+  if [ $rc -eq 0 ]; then ui::ok "$msg"; else ui::err "$msg (rc=$rc)"; fi
+  return $rc
+}
+
+# Choice: gum > fzf > select
+ui::choose() {
+  local prompt="$1"; shift
+  if command -v gum >/dev/null 2>&1; then
+    gum choose "$@"
+  elif command -v fzf >/dev/null 2>&1; then
+    printf "%s\n" "$@" | fzf --prompt="${prompt} > "
+  else
+    PS3="${prompt}: "; select c in "$@"; do [ -n "${c:-}" ] && printf "%s" "$c" && break; done
+  fi
+}
+
 # Provide sudo fallback when not installed (Phase 1 runs as root).
 # Support "sudo -u ..." and plain "sudo ..."
 if ! command -v sudo >/dev/null 2>&1; then
@@ -111,7 +163,6 @@ get_user_home() {
 }
 
 ensure_user_rc_files() {
-  # Create ~/.bashrc and ~/.profile for the user if missing, ensure ownership
   local user="$1"
   local home_dir
   home_dir="$(get_user_home "$user")" || fail "Could not determine home for user '$user'"
@@ -132,17 +183,17 @@ ensure_user_rc_files() {
 # Locale configuration (decomposed)
 # --------------------------------------------
 configure_locale_gen() {
-  log "*" "Configuring /etc/locale.gen for en_US.UTF-8"
+  ui::info "Configuring /etc/locale.gen for en_US.UTF-8"
   sudo sed -i 's/^# *en_US.UTF-8/en_US.UTF-8/' /etc/locale.gen
 }
 
 generate_locale() {
-  log "*" "Generating locales"
+  ui::info "Generating locales"
   sudo locale-gen
 }
 
 persist_locale_env() {
-  log "*" "Persisting locale environment"
+  ui::info "Persisting locale environment"
   echo 'LANG=en_US.UTF-8' | sudo tee /etc/locale.conf >/dev/null
   append_once 'LANG=en_US.UTF-8' /etc/environment
   export LANG=en_US.UTF-8
@@ -176,7 +227,7 @@ ensure_pacman_parallel_downloads() {
 }
 
 install_reflector_best_effort() {
-  log "*" "Installing reflector (best-effort)"
+  ui::info "Installing reflector (best-effort)"
   sudo pacman -Sy --noconfirm --noprogressbar || true
   sudo pacman -S --needed --noconfirm --noprogressbar rsync reflector || true
 }
@@ -184,9 +235,9 @@ install_reflector_best_effort() {
 update_mirrorlist_with_reflector() {
   if command -v reflector >/dev/null 2>&1; then
     if ! reflector --latest 20 --sort rate --save /etc/pacman.d/mirrorlist; then
-      log "i" "reflector failed; keeping existing mirrorlist"
+      ui::warn "reflector failed; keeping existing mirrorlist"
     else
-      log "*" "Mirrorlist updated by reflector"
+      ui::ok "Mirrorlist updated by reflector"
     fi
   fi
 }
@@ -201,7 +252,7 @@ optimize_mirrors_if_enabled() {
 }
 
 refresh_pacman_keyring() {
-  log "*" "Refreshing keyring"
+  ui::info "Refreshing keyring"
   if command -v timedatectl >/dev/null 2>&1; then
     timedatectl status >/dev/null 2>&1 || true
   fi
@@ -218,18 +269,18 @@ pacman_system_update() {
 }
 
 pacman_quiet_update() {
-  log "*" "Refreshing keyring and updating base system"
+  ui::info "Updating base system (Syyu)"
   refresh_pacman_keyring
   pacman_system_update
 }
 
 install_packages() {
-  log "*" "Installing packages (combined transactions)"
+  ui::info "Installing packages"
   local pkgs=("${BASE_PACKAGES[@]}" "${CONTAINER_PACKAGES[@]}")
   retry 3 5 sudo pacman -S --needed --noconfirm --noprogressbar "${pkgs[@]}"
-  log "i" "Optional language toolchains"
+  ui::info "Optional language toolchains"
   sudo pacman -S --needed --noconfirm --noprogressbar "${OPTIONAL_LANG_PACKAGES[@]}" || true
-  log "i" "Optional dotfiles helpers (best-effort)"
+  ui::info "Optional dotfiles helpers (best-effort)"
   sudo pacman -S --needed --noconfirm --noprogressbar "${OPTIONAL_DOTFILES_HELPERS[@]}" || true
 }
 
@@ -239,7 +290,7 @@ install_packages() {
 ensure_user_and_sudo() {
   local user="$1"
   if ! id -u "$user" >/dev/null 2>&1; then
-    log "*" "Creating user $user with passwordless sudo"
+    ui::info "Creating user $user with passwordless sudo"
     sudo useradd -m -s /bin/bash "$user"
   fi
   local sudo_file="/etc/sudoers.d/99-${user}-nopasswd"
@@ -263,12 +314,12 @@ ensure_subids() {
 # WSL configuration
 # --------------------------------------------
 configure_wsl() {
-  log "*" "Writing /etc/wsl.conf (systemd=true, resolv.conf mode: ${DNS_MODE}, default user)"
+  ui::info "Writing /etc/wsl.conf (systemd=true, resolv.conf mode: ${DNS_MODE}, default user)"
   local gen="true"
   case "${DNS_MODE}" in
     static|resolved) gen="false" ;;
     wsl) gen="true" ;;
-    *) log "i" "Unknown DNS_MODE='${DNS_MODE}', defaulting to static"; gen="false"; DNS_MODE="static" ;;
+    *) ui::warn "Unknown DNS_MODE='${DNS_MODE}', defaulting to static"; gen="false"; DNS_MODE="static" ;;
   esac
 
   cat <<EOF | sudo tee /etc/wsl.conf >/dev/null
@@ -309,7 +360,7 @@ lock_resolv_if_enabled() {
 }
 
 configure_dns_static() {
-  log "*" "Configuring static resolv.conf"
+  ui::info "Configuring static resolv.conf"
   ensure_resolv_unlocked
   write_static_resolv_conf
   lock_resolv_if_enabled
@@ -334,13 +385,13 @@ EOF
 }
 
 configure_dns_resolved() {
-  log "*" "Configuring systemd-resolved support"
+  ui::info "Configuring systemd-resolved support"
   ensure_resolv_unlocked
   create_resolved_link_service
 }
 
 configure_dns_wsl() {
-  log "*" "Using WSL-managed resolv.conf"
+  ui::info "Using WSL-managed resolv.conf"
   ensure_resolv_unlocked
 }
 
@@ -349,7 +400,7 @@ configure_dns() {
     static)   configure_dns_static ;;
     resolved) configure_dns_resolved ;;
     wsl)      configure_dns_wsl ;;
-    *)        log "i" "Unknown DNS_MODE='${DNS_MODE}', defaulting to static"; DNS_MODE="static"; configure_dns_static ;;
+    *)        ui::warn "Unknown DNS_MODE='${DNS_MODE}', defaulting to static"; DNS_MODE="static"; configure_dns_static ;;
   esac
 }
 
@@ -361,7 +412,7 @@ install_pyenv_for_user() {
   local home_dir
   home_dir="$(get_user_home "$user")" || fail "Could not determine home for user '$user'"
 
-  log "*" "Setting up pyenv for ${user}"
+  ui::info "Setting up pyenv for ${user}"
   ensure_user_rc_files "$user"
 
   if [ ! -d "${home_dir}/.pyenv" ]; then
@@ -385,7 +436,7 @@ install_nvm_for_user() {
   local home_dir
   home_dir="$(get_user_home "$user")" || fail "Could not determine home for user '$user'"
 
-  log "*" "Setting up nvm for ${user}"
+  ui::info "Setting up nvm for ${user}"
   ensure_user_rc_files "$user"
 
   if [ ! -d "${home_dir}/.nvm" ]; then
@@ -407,7 +458,7 @@ install_rustup_for_user() {
   local home_dir
   home_dir="$(get_user_home "$user")" || fail "Could not determine home for user '$user'"
 
-  log "*" "Setting up rustup for ${user}"
+  ui::info "Setting up rustup for ${user}"
   ensure_user_rc_files "$user"
 
   if [ ! -x "${home_dir}/.cargo/bin/rustc" ]; then
@@ -446,7 +497,7 @@ link_dotfiles_for_user() {
   dotroot="$(detect_dotfiles_root)"
 
   if [ -n "$dotroot" ] && [ -d "$dotroot" ]; then
-    log "*" "Linking dotfiles for ${user} from ${dotroot}"
+    ui::ok "Linking dotfiles for ${user} from ${dotroot}"
     install -d -o "$user" -g "$user" "$home_dir/.config" "$home_dir/.cargo" "$home_dir/.config/nvim"
     safe_link_user "$user" "$dotroot/bash/.bashrc" "$home_dir/.bashrc"
     safe_link_user "$user" "$dotroot/bash/.bash_aliases" "$home_dir/.bash_aliases"
@@ -454,9 +505,8 @@ link_dotfiles_for_user() {
     safe_link_user "$user" "$dotroot/nvim/init.vim" "$home_dir/.config/nvim/init.vim"
     safe_link_user "$user" "$dotroot/rust/config.toml" "$home_dir/.cargo/config.toml"
     safe_link_user "$user" "$dotroot/editorconfig/.editorconfig" "$home_dir/.editorconfig"
-    log "*" "Dotfiles linked."
   else
-    log "i" "dotfiles folder not found; skipped"
+    ui::warn "dotfiles folder not found; skipped"
   fi
 }
 
@@ -494,7 +544,7 @@ enable_core_services() {
 }
 
 enable_services() {
-  log "*" "Enabling services (requires systemd)"
+  ui::info "Enabling services (requires systemd)"
   ensure_systemd_active_or_fail
   configure_sshd_loopback
   enable_core_services
@@ -583,7 +633,7 @@ print_versions_summary() {
 
 finalize_user_toolchains() {
   local user="$1"
-  log "*" "Finalizing toolchains for ${user}"
+  ui::info "Finalizing toolchains for ${user}"
   finalize_pyenv_python "$user"
   finalize_rust "$user"
   finalize_podman "$user"
@@ -592,7 +642,7 @@ finalize_user_toolchains() {
 }
 
 cleanup_for_snapshot() {
-  log "*" "Cleaning caches and logs"
+  ui::info "Cleaning caches and logs"
   yes | sudo pacman -Scc --noconfirm >/dev/null 2>&1 || true
   rm -rf "$HOME/.cache"/* 2>/dev/null || true
   sudo rm -rf /var/cache/pacman/pkg/* 2>/dev/null || true
@@ -604,11 +654,18 @@ cleanup_for_snapshot() {
 # Phases
 # --------------------------------------------
 phase1_main() {
-  log "*" "Starting Phase 1"
-  log "i" "Config: user=${DEFAULT_USER}, DNS_MODE=${DNS_MODE}, OPTIMIZE_MIRRORS=${OPTIMIZE_MIRRORS}"
+  ui::section "Phase 1"
+  ui::info "Config: user=${DEFAULT_USER}, DNS_MODE=${DNS_MODE}, OPTIMIZE_MIRRORS=${OPTIMIZE_MIRRORS}"
+
+  # Optional interactive DNS selection if requested and in TTY
+  if [[ -t 1 && "${PROMPT_DNS_MODE:-0}" = "1" ]]; then
+    DNS_MODE="$(ui::choose "DNS mode" static resolved wsl)"
+    ui::ok "Selected DNS mode: ${DNS_MODE}"
+  fi
+
   ensure_locale
-  pacman_quiet_update
-  install_packages
+  ui::run_with_spinner "Updating system" pacman_quiet_update
+  ui::run_with_spinner "Installing packages" install_packages
   ensure_user_and_sudo "$DEFAULT_USER"
   ensure_subids "$DEFAULT_USER"
   configure_wsl
@@ -619,23 +676,23 @@ phase1_main() {
   install_rustup_for_user "$DEFAULT_USER"
 
   link_dotfiles_for_user "$DEFAULT_USER"
-  log "+" "Phase 1 complete. Terminate WSL and start a new session for Phase 2."
+  ui::ok "Phase 1 complete. Terminate WSL and start a new session for Phase 2."
 }
 
 phase2_main() {
-  log "*" "Starting Phase 2"
+  ui::section "Phase 2"
   enable_services
   finalize_user_toolchains "$DEFAULT_USER"
   cleanup_for_snapshot
   if [ "$DNS_MODE" = "resolved" ]; then
     if command -v resolvectl >/dev/null 2>&1; then
-      log "i" "systemd-resolved active. Check: resolvectl status"
+      ui::info "systemd-resolved active. Check: resolvectl status"
     fi
     if [ -L /etc/resolv.conf ]; then
-      log "i" "/etc/resolv.conf -> $(readlink -f /etc/resolv.conf)"
+      ui::info "/etc/resolv.conf -> $(readlink -f /etc/resolv.conf)"
     fi
   fi
-  log "+" "Phase 2 complete. You can terminate the distro and export a snapshot."
+  ui::ok "Phase 2 complete. You can terminate the distro and export a snapshot."
 }
 
 case "$PHASE" in

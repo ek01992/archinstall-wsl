@@ -1,5 +1,4 @@
 # setup-wsl.ps1
-# Requires Windows 10 2004+ or Windows 11 with WSL2 enabled
 
 [CmdletBinding(SupportsShouldProcess = $true, ConfirmImpact = 'Medium')]
 param(

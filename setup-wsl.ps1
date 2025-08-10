@@ -51,13 +51,11 @@ function Set-WSLDefault {
   if ($LASTEXITCODE -ne 0) {
     throw "WSL is not installed or not available. Install WSL and WSL2 first."
   }
-  # Try to set default version 2 (best-effort)
   try { $null = & wsl.exe --set-default-version 2 } catch { }
   Write-Host "[*] WSL default version set to 2."
 }
 
 function Write-WslConfigSafe {
-  # Back up existing file if present and not ours
   $content = @"
 [wsl2]
 memory=$WSLMemory
@@ -93,8 +91,11 @@ function Wait-ForDistro {
 }
 
 function Invoke-WSLChecked {
-  param([string]$Arguments, [string]$ErrorContext)
-  & wsl.exe $Arguments
+  param(
+    [string[]]$ArgList,
+    [string]$ErrorContext
+  )
+  & wsl.exe @ArgList
   if ($LASTEXITCODE -ne 0) {
     throw "$ErrorContext failed with exit code $LASTEXITCODE"
   }
@@ -139,7 +140,6 @@ if (-not (Wait-ForDistro -Name $DistroName -TimeoutSec 120)) {
 
 # Prepare bootstrap path with normalized LF endings to avoid /usr/bin/env bash\r errors
 $tempBootstrap = Join-Path $env:TEMP "bootstrap-arch-wsl.sh"
-# Normalize CRLF -> LF and write UTF-8 without BOM
 $text = Get-Content -Raw -Encoding UTF8 $bootstrapLocal
 $text = $text -replace "`r`n","`n"
 $text = $text -replace "`r","`n"
@@ -161,14 +161,15 @@ Write-Host "    - Phase 2: enable services and finalize toolchains"
 Write-Host ""
 
 Write-Host "[*] Running Phase 1 inside WSL as root..."
-Invoke-WSLChecked "-d $DistroName -u root -- bash -lc ""chmod +x '$mntPath' && DEFAULT_USER='$DefaultUser' WSL_MEMORY='$WSLMemory' WSL_CPUS='$WSLCPUs' REPO_ROOT_MNT='$mntRepoRoot' DNS_MODE='$DnsMode' '$mntPath' phase1""" "Phase 1"
+$phase1Cmd = "chmod +x '$mntPath' && DEFAULT_USER='$DefaultUser' WSL_MEMORY='$WSLMemory' WSL_CPUS='$WSLCPUs' REPO_ROOT_MNT='$mntRepoRoot' DNS_MODE='$DnsMode' '$mntPath' phase1"
+Invoke-WSLChecked -ArgList @('-d', $DistroName, '-u', 'root', '--', 'bash', '-lc', $phase1Cmd) -ErrorContext "Phase 1"
 
 Write-Host "[*] Shutting down WSL to activate systemd and default user..."
 & wsl.exe --shutdown
 
 Write-Host "[*] Running Phase 2 inside WSL..."
 $phase2Cmd = "DEFAULT_USER='$DefaultUser' DNS_MODE='$DnsMode' '$mntPath' phase2"
-Invoke-WSLChecked "-d $DistroName -u root -- bash -lc ""$phase2Cmd""" "Phase 2"
+Invoke-WSLChecked -ArgList @('-d', $DistroName, '-u', 'root', '--', 'bash', '-lc', $phase2Cmd) -ErrorContext "Phase 2"
 
 Write-Host "[*] Terminating distro before export..."
 & wsl.exe --terminate $DistroName

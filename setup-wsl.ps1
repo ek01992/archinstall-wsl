@@ -1,3 +1,4 @@
+# setup-wsl.ps1
 [CmdletBinding(SupportsShouldProcess = $true, ConfirmImpact = 'Medium')]
 param(
     [switch]$Force,
@@ -47,7 +48,7 @@ function Get-TuiChars {
   $isUtf = $true
   try { $isUtf = [Console]::OutputEncoding.BodyName -match 'utf' } catch { $isUtf = $true }
   if ($env:UI_ASCII -eq '1' -or -not $isUtf) {
-    return @{ TL='+'; TR='+'; BL='+'; BR='+'; H='-'; V='|'' }
+    return @{ TL='+'; TR='+'; BL='+'; BR='+'; H='-'; V='|' }
   } else {
     return @{ TL='┌'; TR='┐'; BL='└'; BR='┘'; H='─'; V='│' }
   }

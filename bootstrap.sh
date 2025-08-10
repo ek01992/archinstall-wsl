@@ -144,6 +144,26 @@ ui::ok()    { printf "%b %s\n" "${GREEN}[+]${RESET}" "$*"; }
 ui::warn()  { printf "%b %s\n" "${YELLOW}[!]${RESET}" "$*"; }
 ui::err()   { printf "%b %s\n" "${RED}[x]${RESET}" "$*"; }
 
+# NEW: key-value table helper used in phase1 preflight
+ui::kv_table() {
+  if (( $# % 2 != 0 )); then
+    ui::warn "ui::kv_table received an odd number of args"; # continue best-effort
+  fi
+  local -a args=( "$@" )
+  local max=0 i k v
+  for ((i=0; i<${#args[@]}; i+=2)); do
+    k="${args[i]:-}"
+    [ -z "$k" ] && break
+    [ "${#k}" -gt "$max" ] && max=${#k}
+  done
+  for ((i=0; i<${#args[@]}; i+=2)); do
+    k="${args[i]:-}"
+    v="${args[i+1]:-}"
+    [ -z "$k" ] && break
+    printf "%b %-*s%b : %s\n" "${MUTED}" "$max" "$k" "${RESET}" "$v"
+  done
+}
+
 ui::run_with_spinner() {
   local msg="$1"; shift
   local spin='-\|/'; local i=0

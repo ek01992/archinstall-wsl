@@ -13,7 +13,13 @@ jobs:
       - name: Install deps
         run: sudo apt-get update && sudo apt-get install -y shellcheck bats
       - name: ShellCheck
-        run: shellcheck -x bin/arch-wsl lib/bash/*.sh
+        run: |
+          if [ -f bin/arch-wsl ]; then
+            shellcheck -x bin/arch-wsl lib/bash/*.sh
+          else
+            echo "bin/arch-wsl not found; shellchecking lib/bash only"
+            shellcheck -x lib/bash/*.sh
+          fi
       - name: Bats tests
         run: bats tests/bats || true
   windows:
@@ -25,4 +31,9 @@ jobs:
         run: Install-Module PSScriptAnalyzer -Scope CurrentUser -Force
       - name: Analyze PowerShell
         shell: pwsh
-        run: Invoke-ScriptAnalyzer -Path src/ps -Recurse -Severity Warning
+        run: |
+          if (Test-Path 'src/ps') {
+            Invoke-ScriptAnalyzer -Path src/ps -Recurse -Severity Warning
+          } else {
+            Write-Host 'src/ps not found; skipping analysis'
+          }

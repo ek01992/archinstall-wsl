@@ -1,12 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# ============================================
-# Arch WSL two-phase bootstrap
-#  - Phase 1: Locale, keyring, base packages, WSL config, user creation, dev tools init, dotfiles
-#  - Phase 2: Enable services under systemd, finalize user toolchains, cleanup
-# ============================================
-
 PHASE="${1:-phase1}"
 DEFAULT_USER="${DEFAULT_USER:-erik}"
 WSL_MEMORY="${WSL_MEMORY:-8GB}"
@@ -15,6 +9,7 @@ REPO_ROOT_MNT="${REPO_ROOT_MNT:-}"
 
 # DNS strategy: static | resolved | wsl
 DNS_MODE="${DNS_MODE:-static}"
+
 # DNS settings when we manage resolv.conf ourselves (static mode)
 NAMESERVERS=("1.1.1.1" "9.9.9.9")
 CHATTR_IMMUTABLE_RESOLV="${CHATTR_IMMUTABLE_RESOLV:-true}"

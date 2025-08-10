@@ -281,6 +281,10 @@ install_pyenv_nvm_rustup_for_user() {
 
   log "*" "Setting up pyenv, nvm, rustup for ${user}"
 
+  # Ensure shell rc files exist and are owned by the user BEFORE installers amend them
+  sudo -u "$user" bash -lc 'touch "$HOME/.bashrc" "$HOME/.profile"'
+  sudo chown "$user:$user" "${home_dir}/.bashrc" "${home_dir}/.profile" 2>/dev/null || true
+
   # pyenv
   if [ ! -d "${home_dir}/.pyenv" ]; then
     sudo -u "$user" env -i HOME="$home_dir" PATH="/usr/bin:/bin" bash -lc 'set -e; command -v curl >/dev/null 2>&1; curl -fsSL https://pyenv.run | bash'
@@ -311,7 +315,7 @@ install_pyenv_nvm_rustup_for_user() {
   fi
   append_once 'export PATH="$HOME/.cargo/bin:$PATH"' "${home_dir}/.bashrc"
 
-  # Fix ownership so tools can amend shell profiles (avoids rustup write errors)
+  # Ensure ownership for future edits
   sudo chown "$user:$user" "${home_dir}/.bashrc" "${home_dir}/.profile" 2>/dev/null || true
   sudo chown -R "$user:$user" "${home_dir}/.pyenv" "${home_dir}/.nvm" "${home_dir}/.cargo" 2>/dev/null || true
 }
